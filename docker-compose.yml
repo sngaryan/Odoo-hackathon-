@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecosphere-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ecosphere
+    ports:
+      - "5432:5432"
+    volumes:
+      - ecosphere-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  ecosphere-postgres-data:

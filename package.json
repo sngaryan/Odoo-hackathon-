@@ -1,0 +1,29 @@
+{
+  "name": "odoo-hackathon-",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev:web": "npm run dev --workspace apps/web",
+    "dev:api": "npm run dev --workspace apps/api",
+    "typecheck:web": "npm run typecheck --workspace apps/web"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sngaryan/Odoo-hackathon-.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/sngaryan/Odoo-hackathon-/issues"
+  },
+  "homepage": "https://github.com/sngaryan/Odoo-hackathon-#readme",
+  "private": "true",
+  "workspaces": [
+    "apps/web",
+    "apps/api"
+  ]
+}
