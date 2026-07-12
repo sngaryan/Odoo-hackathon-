@@ -76,15 +76,15 @@ export function PolicyHistoryLog({ sessionEvents = [] }: PolicyHistoryLogProps) 
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Acknowledgement Log</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Real-time audit log of corporate policy acceptances.
+            Audit history of corporate policy acceptances.
           </p>
         </div>
-        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-          Active Sync
+        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+          Sync Active
         </span>
       </div>
 
@@ -94,56 +94,48 @@ export function PolicyHistoryLog({ sessionEvents = [] }: PolicyHistoryLogProps) 
           <p className="text-sm">No historical policy acceptances recorded yet.</p>
         </div>
       ) : (
-        <div className="relative pl-6 after:absolute after:inset-y-1 after:left-[11px] after:w-[2px] after:bg-gradient-to-b after:from-emerald-500 after:via-teal-500 after:to-indigo-500">
-          <div className="space-y-6">
-            {allEvents.map((event) => {
-              const isSessionEvent = event.id.startsWith("session-");
-              return (
-                <div key={event.id} className="relative group transition-transform duration-200 hover:translate-x-1">
-                  {/* Timeline icon indicator */}
-                  <span className="absolute -left-[19px] top-1.5 flex h-[14px] w-[14px] items-center justify-center rounded-full bg-white ring-2 ring-emerald-500 z-10 transition duration-200 group-hover:scale-110">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    {isSessionEvent && (
-                      <span className="absolute -inset-0.5 animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    )}
+        <div className="divide-y divide-slate-100 max-h-[380px] overflow-y-auto pr-1">
+          {allEvents.map((event) => {
+            const isSessionEvent = event.id.startsWith("session-");
+            return (
+              <div
+                key={event.id}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0"
+              >
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  {/* Status Check Icon badge */}
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] ring-1 ring-inset ring-emerald-600/10 select-none">
+                    ✓
                   </span>
-
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                        <span className="text-sm font-semibold text-slate-900 whitespace-nowrap">
-                          {event.userName}
-                        </span>
-                        <span className="text-xs text-slate-500 font-medium">
-                          ({event.userRole}
-                          {event.userDept ? ` · ${event.userDept}` : ""})
-                        </span>
-                        {isSessionEvent && (
-                          <span className="inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
-                            New
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-xs text-slate-600">
-                        {event.action}{" "}
-                        <span className="font-semibold text-slate-700">
-                          &ldquo;{event.policyTitle}&rdquo;
-                        </span>{" "}
-                        <span className="text-slate-500">v{event.policyVersion}</span>
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-slate-400 shrink-0 self-start sm:self-auto">
-                      <Clock className="h-3.5 w-3.5 text-slate-400" />
-                      <span className="text-xs font-medium text-slate-500">
-                        {formatTime(event.timestamp)}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="text-sm font-semibold text-slate-900 whitespace-nowrap">
+                        {event.userName}
                       </span>
+                      <span className="text-xs text-slate-500 truncate">
+                        {event.userRole} {event.userDept ? `· ${event.userDept}` : ""}
+                      </span>
+                      {isSessionEvent && (
+                        <span className="inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
+                          New
+                        </span>
+                      )}
                     </div>
+                    <p className="text-xs text-slate-600 mt-1">
+                      {event.action} <span className="font-semibold text-slate-800">&ldquo;{event.policyTitle}&rdquo;</span> <span className="text-slate-400">v{event.policyVersion}</span>
+                    </p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+
+                <div className="flex items-center gap-1.5 text-slate-400 shrink-0 self-start sm:self-auto pl-8 sm:pl-0">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span className="text-xs font-medium text-slate-500">
+                    {formatTime(event.timestamp)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
