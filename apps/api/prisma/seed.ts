@@ -79,6 +79,8 @@ async function main() {
 
   // Clean up existing records in dependency order
   await prisma.userBadge.deleteMany({});
+  await prisma.rewardRedemption.deleteMany({});
+  await prisma.rewardItem.deleteMany({});
   await prisma.challengeSubmission.deleteMany({});
   await prisma.csrParticipation.deleteMany({});
   await prisma.challenge.deleteMany({});
@@ -127,6 +129,15 @@ async function main() {
     });
   }
   console.log("Seeded Badges.");
+
+  await prisma.rewardItem.createMany({
+    data: [
+      { name: "Reusable Eco Kit", description: "Company-branded bottle, lunch box, and tote bag.", category: "COMPANY_PERK", xpCost: 150, stock: 20 },
+      { name: "Carbon Offset Certificate", description: "Fund a verified 100 kg CO₂e offset in your name.", category: "CARBON_OFFSET", xpCost: 250, stock: null },
+      { name: "Plant Five Trees", description: "Sponsor five native saplings through EcoSphere's tree-planting partner.", category: "TREE_PLANTING", xpCost: 400, stock: null },
+    ],
+  });
+  console.log("Seeded Rewards Store.");
 
   const greenCommuterBadge = await prisma.badge.findUniqueOrThrow({ where: { name: "Green Commuter" } });
 

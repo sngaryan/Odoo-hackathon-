@@ -45,6 +45,7 @@ model User {
   ownedIssues            ComplianceIssue[]     @relation("IssueOwner")
   reports                ReportRun[]
   proofEvidence          ProofEvidence[]
+  rewardRedemptions      RewardRedemption[]
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 }
@@ -153,6 +154,33 @@ model UserBadge {
   earnedAt DateTime @default(now())
 
   @@unique([userId, badgeId])
+}
+
+model RewardItem {
+  id          String             @id @default(cuid())
+  name        String
+  description String
+  category    String
+  xpCost      Int
+  stock       Int?
+  active      Boolean            @default(true)
+  redemptions RewardRedemption[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+model RewardRedemption {
+  id           String     @id @default(cuid())
+  userId       String
+  rewardItemId String
+  xpSpent      Int
+  status       String     @default("REQUESTED")
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rewardItem   RewardItem @relation(fields: [rewardItemId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([userId, createdAt])
 }
 
 enum PolicyStatus {
