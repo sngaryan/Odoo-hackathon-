@@ -5,6 +5,8 @@ import { governanceRouter } from "./modules/governance/routes.js";
 import { socialRouter } from "./modules/social/routes.js";
 import { gamificationRouter } from "./modules/gamification/routes.js";
 
+import { environmentalRouter } from "./modules/environmental/routes.js";
+
 export const app = express();
 
 app.use(cors());
@@ -23,3 +25,4 @@ app.use("/auth", authRouter);
 app.use("/api/v1", governanceRouter);
 app.use("/social", socialRouter);
 app.use("/gamification", gamificationRouter);
+app.use("/api/v1/environmental", environmentalRouter);
