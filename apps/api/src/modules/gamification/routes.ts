@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { authenticate } from "../../middleware/authenticate.js";
@@ -26,6 +27,10 @@ const submitChallengeProofSchema = z.object({
   proofText: z.string().min(10, "Proof description must be at least 10 characters long."),
 });
 
+const rejectChallengeSubmissionSchema = z.object({
+  reviewFeedback: z.string().trim().min(3, "Feedback must be at least 3 characters long.").max(1000),
+});
+
 function handlePhotoUpload(
   req: Request,
   res: Response,
@@ -46,24 +51,24 @@ function handlePhotoUpload(
 }
 
 // Helper: Award XP-based badges
-async function checkAndAwardXpBadges(userId: string, currentXp: number) {
-  const xpBadges = await prisma.badge.findMany({
+async function checkAndAwardXpBadges(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  currentXp: number,
+) {
+  const xpBadges = await tx.badge.findMany({
     where: { xpThreshold: { gt: 0 } },
   });
 
-  for (const badge of xpBadges) {
-    if (currentXp >= badge.xpThreshold) {
-      const existing = await prisma.userBadge.findUnique({
-        where: {
-          userId_badgeId: { userId, badgeId: badge.id },
-        },
-      });
-      if (!existing) {
-        await prisma.userBadge.create({
-          data: { userId, badgeId: badge.id },
-        });
-      }
-    }
+  const earnedBadgeIds = xpBadges
+    .filter((badge) => currentXp >= badge.xpThreshold)
+    .map((badge) => badge.id);
+
+  if (earnedBadgeIds.length > 0) {
+    await tx.userBadge.createMany({
+      data: earnedBadgeIds.map((badgeId) => ({ userId, badgeId })),
+      skipDuplicates: true,
+    });
   }
 }
 
@@ -176,6 +181,7 @@ gamificationRouter.post(
         data: {
           status: "SUBMITTED",
           proofText: parsedBody.data.proofText,
+          reviewFeedback: null,
           submittedAt: new Date(),
           approvedAt: null,
           approvedById: null,
@@ -271,62 +277,66 @@ gamificationRouter.post("/submissions/:id/approve", authenticate, async (req, re
   const id = req.params.id as string;
 
   try {
-    const submission = await prisma.challengeSubmission.findUnique({
-      where: { id },
-      include: { challenge: true, user: true },
-    });
+    const result = await prisma.$transaction(async (tx) => {
+      const submission = await tx.challengeSubmission.findUnique({
+        where: { id },
+        include: { challenge: true },
+      });
 
-    if (!submission) {
-      res.status(404).json({ error: { message: "Submission not found." } });
-      return;
-    }
+      if (!submission) {
+        return { kind: "NOT_FOUND" as const };
+      }
 
-    if (submission.status === "APPROVED") {
-      res.status(400).json({ error: { message: "Submission is already approved." } });
-      return;
-    }
-
-    const updated = await prisma.challengeSubmission.update({
-      where: { id },
-      data: {
-        status: "APPROVED",
-        approvedAt: new Date(),
-        approvedById: req.user.sub,
-      },
-    });
-
-    // Update user XP
-    const newXp = submission.user.xp + submission.challenge.xpReward;
-    await prisma.user.update({
-      where: { id: submission.userId },
-      data: { xp: newXp },
-    });
-
-    // Award badge reward if any
-    if (submission.challenge.badgeRewardId) {
-      const existingBadge = await prisma.userBadge.findUnique({
-        where: {
-          userId_badgeId: {
-            userId: submission.userId,
-            badgeId: submission.challenge.badgeRewardId,
-          },
+      // This conditional update is the concurrency guard: exactly one request can
+      // transition a pending submission, and only that request continues to XP/badges.
+      const approval = await tx.challengeSubmission.updateMany({
+        where: { id, status: "SUBMITTED" },
+        data: {
+          status: "APPROVED",
+          approvedAt: new Date(),
+          approvedById: req.user.sub,
         },
       });
 
-      if (!existingBadge) {
-        await prisma.userBadge.create({
+      if (approval.count === 0) {
+        return { kind: "ALREADY_REVIEWED" as const };
+      }
+
+      const user = await tx.user.update({
+        where: { id: submission.userId },
+        data: { xp: { increment: submission.challenge.xpReward } },
+        select: { xp: true },
+      });
+
+      if (submission.challenge.badgeRewardId) {
+        await tx.userBadge.createMany({
           data: {
             userId: submission.userId,
             badgeId: submission.challenge.badgeRewardId,
           },
+          skipDuplicates: true,
         });
       }
+
+      await checkAndAwardXpBadges(tx, submission.userId, user.xp);
+
+      return {
+        kind: "APPROVED" as const,
+        submission: await tx.challengeSubmission.findUniqueOrThrow({ where: { id } }),
+      };
+    });
+
+    if (result.kind === "NOT_FOUND") {
+      res.status(404).json({ error: { message: "Submission not found." } });
+      return;
     }
 
-    // Check other threshold badges
-    await checkAndAwardXpBadges(submission.userId, newXp);
+    if (result.kind === "ALREADY_REVIEWED") {
+      res.status(409).json({ error: { message: "Submission has already been reviewed." } });
+      return;
+    }
 
-    res.json({ data: updated });
+    res.json({ data: result.submission });
   } catch (error: any) {
     res.status(500).json({ error: { message: error.message } });
   }
@@ -340,6 +350,13 @@ gamificationRouter.post("/submissions/:id/reject", authenticate, async (req, res
   }
 
   const id = req.params.id as string;
+  const parsedBody = rejectChallengeSubmissionSchema.safeParse(req.body);
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: { message: parsedBody.error.issues[0]?.message ?? "Reviewer feedback is required." },
+    });
+    return;
+  }
 
   try {
     const submission = await prisma.challengeSubmission.findUnique({
@@ -355,6 +372,7 @@ gamificationRouter.post("/submissions/:id/reject", authenticate, async (req, res
       where: { id },
       data: {
         status: "REJECTED",
+        reviewFeedback: parsedBody.data.reviewFeedback,
         approvedAt: new Date(),
         approvedById: req.user.sub,
       },

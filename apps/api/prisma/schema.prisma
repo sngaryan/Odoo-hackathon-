@@ -106,6 +106,7 @@ model ChallengeSubmission {
   challenge    Challenge @relation(fields: [challengeId], references: [id])
   status       String    // "SUBMITTED" | "APPROVED" | "REJECTED"
   proofText    String
+  reviewFeedback String?
   submittedAt  DateTime  @default(now())
   approvedAt   DateTime?
   approvedById String?
