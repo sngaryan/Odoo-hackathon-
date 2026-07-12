@@ -1,7 +1,7 @@
 import "dotenv/config";
 
 import bcrypt from "bcrypt";
-import { PrismaClient, Role } from "@prisma/client";
+import { AuditStatus, IssueSeverity, IssueStatus, PolicyStatus, PrismaClient, Role } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -72,6 +72,18 @@ async function main() {
       },
     });
   }
+
+  const auditor = await prisma.user.findUniqueOrThrow({ where: { email: "auditor@ecosphere.demo" } });
+  const manager = await prisma.user.findUniqueOrThrow({ where: { email: "manager@ecosphere.demo" } });
+  const policy = await prisma.policy.upsert({
+    where: { title_version: { title: "Environmental Data Integrity", version: "1.0" } },
+    update: { summary: "Every ESG record must be traceable, timely, and supported by evidence.", status: PolicyStatus.ACTIVE, publishedAt: new Date("2026-01-15") },
+    create: { title: "Environmental Data Integrity", version: "1.0", summary: "Every ESG record must be traceable, timely, and supported by evidence.", status: PolicyStatus.ACTIVE, publishedAt: new Date("2026-01-15") },
+  });
+  await prisma.policy.upsert({ where: { title_version: { title: "Responsible Workplace", version: "2.1" } }, update: {}, create: { title: "Responsible Workplace", version: "2.1", summary: "Sets expectations for inclusive, safe, and ethical workplace conduct.", status: PolicyStatus.ACTIVE, publishedAt: new Date("2026-02-01") } });
+  await prisma.policyAcknowledgement.upsert({ where: { userId_policyId: { userId: manager.id, policyId: policy.id } }, update: {}, create: { userId: manager.id, policyId: policy.id } });
+  const audit = await prisma.audit.upsert({ where: { id: "seed-governance-audit" }, update: {}, create: { id: "seed-governance-audit", title: "Q2 ESG Controls Review", scope: "Environmental reporting controls and evidence retention", auditDate: new Date("2026-06-20"), auditorId: auditor.id, status: AuditStatus.COMPLETED } });
+  await prisma.complianceIssue.upsert({ where: { id: "seed-evidence-issue" }, update: {}, create: { id: "seed-evidence-issue", auditId: audit.id, title: "Missing supplier emissions evidence", description: "Two supplier submissions are missing source documentation.", severity: IssueSeverity.HIGH, status: IssueStatus.IN_PROGRESS, ownerId: manager.id, openedAt: new Date("2026-06-21") } });
 
   console.log("Seeded EcoSphere departments and demo users.");
   console.table(
