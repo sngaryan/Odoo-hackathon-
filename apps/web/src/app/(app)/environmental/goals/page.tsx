@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { getToken, getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { EnvironmentalNav } from "@/components/EnvironmentalNav";
 
+type Department = { id: string; name: string };
+
 type Goal = {
   id: string;
   name: string;
@@ -17,6 +19,7 @@ type Goal = {
 export default function EnvironmentalGoalsPage() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -26,6 +29,7 @@ export default function EnvironmentalGoalsPage() {
   
   const [formData, setFormData] = useState({
     name: "",
+    departmentId: "",
     targetKgCo2e: "",
     currentKgCo2e: "0",
     deadline: new Date().toISOString().split("T")[0],
@@ -41,13 +45,22 @@ export default function EnvironmentalGoalsPage() {
       if (!token) return;
 
       try {
-        const res = await fetch("http://localhost:4000/api/v1/environmental/goals", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const [goalsRes, deptRes] = await Promise.all([
+          fetch("http://localhost:4000/api/v1/environmental/goals", {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          fetch("http://localhost:4000/api/v1/environmental/departments", {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ]);
 
-        if (res.ok) {
-          const body = await res.json();
+        if (goalsRes.ok) {
+          const body = await goalsRes.json();
           setGoals(body.data);
+        }
+        if (deptRes.ok) {
+          const body = await deptRes.json();
+          setDepartments(body.data);
         }
       } catch (err) {
         console.error(err);
@@ -77,6 +90,7 @@ export default function EnvironmentalGoalsPage() {
     setFormSuccess(false);
     setFormData({
       name: "",
+      departmentId: user?.department?.id || (departments.length > 0 ? departments[0].id : ""),
       targetKgCo2e: "",
       currentKgCo2e: "0",
       deadline: new Date().toISOString().split("T")[0],
@@ -91,6 +105,7 @@ export default function EnvironmentalGoalsPage() {
     setFormSuccess(false);
     setFormData({
       name: goal.name,
+      departmentId: "",
       targetKgCo2e: goal.targetKgCo2e,
       currentKgCo2e: goal.currentKgCo2e,
       deadline: new Date(goal.deadline).toISOString().split("T")[0],
@@ -120,6 +135,7 @@ export default function EnvironmentalGoalsPage() {
         },
         body: JSON.stringify({
           name: formData.name,
+          ...(!editingGoal && { departmentId: formData.departmentId }),
           targetKgCo2e: Number(formData.targetKgCo2e),
           ...(editingGoal && { currentKgCo2e: Number(formData.currentKgCo2e) }),
           deadline: new Date(formData.deadline).toISOString(),
@@ -136,7 +152,8 @@ export default function EnvironmentalGoalsPage() {
       if (editingGoal) {
         setGoals(goals.map(g => g.id === editingGoal.id ? { ...g, ...body.data } : g));
       } else {
-        setGoals([...goals, { ...body.data, department: user?.department }].sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime()));
+        const dName = departments.find(d => d.id === formData.departmentId)?.name || user?.department?.name || "";
+        setGoals([...goals, { ...body.data, department: { name: dName } }].sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime()));
       }
       
       setFormSuccess(true);
@@ -261,13 +278,27 @@ export default function EnvironmentalGoalsPage() {
               <form id="goal-form" onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Department</label>
-                  <input 
-                    type="text" 
-                    readOnly 
-                    disabled
-                    className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500"
-                    value={user?.department?.name || ""}
-                  />
+                  {editingGoal ? (
+                    <input 
+                      type="text" 
+                      readOnly 
+                      disabled
+                      className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500"
+                      value={editingGoal.department.name}
+                    />
+                  ) : (
+                    <select
+                      required
+                      className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      value={formData.departmentId}
+                      onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
+                    >
+                      <option value="" disabled>Select a department</option>
+                      {departments.map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 
                 <div>

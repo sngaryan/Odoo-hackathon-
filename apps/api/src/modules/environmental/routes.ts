@@ -8,11 +8,15 @@ import {
   getGoals,
   createGoal,
   updateGoal,
+  getDepartments,
 } from "./controllers.js";
 
 export const environmentalRouter = Router();
 
 environmentalRouter.use(authenticate);
+
+// Departments
+environmentalRouter.get("/departments", authorize("ADMIN", "ESG_MANAGER"), getDepartments);
 
 // Factors
 environmentalRouter.get("/factors", getFactors);
