@@ -176,7 +176,6 @@ export default function ReportsPage() {
     }
     setIsExporting("csv");
     try {
-      // Simulate API query call or request
       await new Promise((resolve) => setTimeout(resolve, 800));
       
       const csv = generateCSVContent();
@@ -203,43 +202,204 @@ export default function ReportsPage() {
       return;
     }
     setIsExporting("pdf");
+
+    // Open clean print page
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      showToast("Pop-up blocked. Please enable pop-ups to generate PDF.", "error");
+      setIsExporting(null);
+      return;
+    }
+
     try {
-      // Simulate premium PDF generation call
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      
-      // For presentation purposes, trigger window print styled view or download a text layout
       const activeHeaders = allColumns[reportType].filter((col) =>
         selectedColumns.includes(col.key)
       );
-      let pdfLayout = `ECOSPHERE ESG REPORT ENGINE\n`;
-      pdfLayout += `Category: ${reportType.toUpperCase()}\n`;
-      pdfLayout += `Generated on: ${new Date().toLocaleString()}\n`;
-      pdfLayout += `Filters Applied: Department: ${selectedDept}, Date Range: ${startDate || "Any"} to ${endDate || "Any"}\n`;
-      pdfLayout += `========================================================================\n\n`;
+
+      let tableHeadersHtml = activeHeaders
+        .map((col) => `<th style="text-align: left; padding: 12px 10px; border-bottom: 2px solid #0f766e; font-size: 11px; text-transform: uppercase; color: #0f766e; font-weight: 700;">${col.label}</th>`)
+        .join("");
       
-      previewData.forEach((row, i) => {
-        pdfLayout += `Record #${i + 1}:\n`;
-        activeHeaders.forEach((col) => {
-          pdfLayout += `  ${col.label}: ${row[col.key] ?? "N/A"}\n`;
-        });
-        pdfLayout += `------------------------------------------------------------------------\n`;
-      });
+      let tableRowsHtml = previewData
+        .map((row) => {
+          let tds = activeHeaders
+            .map((col) => {
+              const val = row[col.key] ?? "N/A";
+              return `<td style="padding: 12px 10px; border-bottom: 1px solid #e2e8f0; font-size: 12px; color: #334155;">${val}</td>`;
+            })
+            .join("");
+          return `<tr>${tds}</tr>`;
+        })
+        .join("");
 
-      const blob = new Blob([pdfLayout], { type: "application/pdf" }); // Mock pdf type download
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `ecosphere-custom-${reportType}-${Date.now()}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>EcoSphere ESG Audit Report - ${reportType.toUpperCase()}</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+              .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #10b981; padding-bottom: 20px; margin-bottom: 30px; }
+              .logo { font-size: 24px; font-weight: 800; color: #0f766e; }
+              .logo span { color: #10b981; }
+              .meta { font-size: 11px; text-align: right; color: #64748b; }
+              .title { font-size: 22px; font-weight: 700; color: #0f172a; margin-top: 0; margin-bottom: 8px; }
+              .subtitle { font-size: 13px; color: #475569; margin-top: 0; }
+              .filter-badge { display: inline-block; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; font-size: 11px; margin-bottom: 25px; color: #475569; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+              .footer { margin-top: 80px; display: flex; justify-content: space-between; font-size: 11px; color: #64748b; }
+              .signature-box { width: 220px; border-top: 1px solid #94a3b8; text-align: center; padding-top: 8px; margin-top: 50px; font-weight: 600; }
+              @media print {
+                body { padding: 0; }
+                .no-print { display: none; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div>
+                <div class="logo">Eco<span>Sphere</span></div>
+                <p style="margin: 2px 0 0 0; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; font-weight: 700;">ESG Operations Hub</p>
+              </div>
+              <div class="meta">
+                <p style="margin: 0;"><strong>Scope:</strong> ${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Audit Log</p>
+                <p style="margin: 4px 0 0 0;"><strong>Date:</strong> ${new Date().toLocaleDateString("en-GB", { dateStyle: "long" })}</p>
+              </div>
+            </div>
 
-      showToast("Custom PDF report compiled successfully.", "success");
+            <h1 class="title">Corporate Compliance & Audit Report</h1>
+            <p class="subtitle font-medium">Official data trail extract from the EcoSphere ESG Command Center.</p>
+
+            <div class="filter-badge">
+              <strong>Query Parameters:</strong> &nbsp;&nbsp;&nbsp; 
+              Department: <span style="color:#0f172a; font-weight:600;">${selectedDept === "all" ? "All Departments" : selectedDept}</span> &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; 
+              Date Range: <span style="color:#0f172a; font-weight:600;">${startDate || "Beginning"}</span> to <span style="color:#0f172a; font-weight:600;">${endDate || "Present"}</span>
+            </div>
+
+            <table>
+              <thead>
+                <tr>${tableHeadersHtml}</tr>
+              </thead>
+              <tbody>
+                ${tableRowsHtml}
+              </tbody>
+            </table>
+
+            <div class="footer">
+              <div class="signature-box">
+                Lead Auditor Sign-off
+              </div>
+              <div class="signature-box">
+                Director of Governance
+              </div>
+            </div>
+
+            <script>
+              window.onload = function() {
+                window.print();
+                setTimeout(() => { window.close(); }, 500);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+
+      printWindow.document.close();
+      showToast("Audit PDF compiled successfully.", "success");
     } catch {
-      showToast("Unable to download PDF report.", "error");
+      showToast("Unable to compile PDF report.", "error");
     } finally {
       setIsExporting(null);
     }
+  };
+
+  const renderAnalyticsSummary = () => {
+    if (previewData.length === 0) return null;
+
+    if (reportType === "governance") {
+      const activeCount = previewData.filter((r) => r.status === "ACTIVE").length;
+      const pct = Math.round((activeCount / previewData.length) * 100);
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Policy Completion</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{pct}%</p>
+            <div className="w-full bg-slate-200 rounded-full h-1.5 mt-2 overflow-hidden">
+              <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${pct}%` }}></div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Policies</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{activeCount} <span className="text-xs text-slate-400 font-medium">/ {previewData.length} total</span></p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Departments</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{new Set(previewData.map(r => r.department)).size}</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (reportType === "issues") {
+      const highCount = previewData.filter((r) => r.severity === "HIGH").length;
+      const resolvedCount = previewData.filter((r) => r.status === "RESOLVED").length;
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">High Severity Gaps</p>
+            <p className="text-2xl font-bold text-rose-600 mt-1">{highCount}</p>
+            <p className="text-[10px] text-slate-500 mt-1 font-medium">Require immediate mitigation</p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Resolution Status</p>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-inset ring-amber-600/10">
+                {previewData.length - resolvedCount} Open
+              </span>
+              <span className="inline-flex items-center rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 ring-1 ring-inset ring-emerald-600/10">
+                {resolvedCount} Resolved
+              </span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-1.5 mt-3.5 overflow-hidden flex">
+              <div className="bg-emerald-500 h-1.5" style={{ width: `${(resolvedCount / previewData.length) * 100}%` }}></div>
+              <div className="bg-amber-400 h-1.5" style={{ width: `${((previewData.length - resolvedCount) / previewData.length) * 100}%` }}></div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Assigned Teams</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{new Set(previewData.map(r => r.department)).size}</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (reportType === "audits") {
+      const completedCount = previewData.filter((r) => r.status === "COMPLETED").length;
+      const plannedCount = previewData.filter((r) => r.status === "PLANNED").length;
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Audit Coverage</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{previewData.length} Total Audits</p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Audit Status Breakdown</p>
+            <div className="flex items-center gap-1.5 mt-2">
+              <span className="text-[10px] font-bold text-emerald-600">{completedCount} Done</span>
+              <span className="text-[10px] text-slate-300">•</span>
+              <span className="text-[10px] font-bold text-blue-600">{previewData.length - completedCount - plannedCount} Active</span>
+              <span className="text-[10px] text-slate-300">•</span>
+              <span className="text-[10px] font-bold text-slate-500">{plannedCount} Planned</span>
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lead Auditors</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{new Set(previewData.map(r => r.auditor)).size}</p>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -428,6 +588,11 @@ export default function ReportsPage() {
                 </button>
               </div>
             </div>
+
+            {/* Impressive Analytics Summary Component */}
+            <ErrorBoundary>
+              {renderAnalyticsSummary()}
+            </ErrorBoundary>
 
             {/* Preview Table View */}
             <div className="flex-1 overflow-x-auto">
