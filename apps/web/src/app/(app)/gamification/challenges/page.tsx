@@ -21,6 +21,7 @@ type Challenge = {
     id: string;
     status: "SUBMITTED" | "APPROVED" | "REJECTED";
     proofText: string;
+    reviewFeedback?: string | null;
   }>;
 };
 
@@ -28,8 +29,14 @@ type Submission = {
   id: string;
   status: "SUBMITTED" | "APPROVED" | "REJECTED";
   proofText: string;
+  reviewFeedback?: string | null;
   submittedAt: string;
   approvedAt?: string | null;
+  evidence?: Array<{
+    id: string;
+    originalName: string;
+    url: string;
+  }>;
   user: {
     id: string;
     name: string;
@@ -67,6 +74,8 @@ export default function ChallengesPage() {
   // Proof Modal
   const [activeProofChallenge, setActiveProofChallenge] = useState<Challenge | null>(null);
   const [proofText, setProofText] = useState("");
+  const [proofPhotos, setProofPhotos] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
   const [proofError, setProofError] = useState<string | null>(null);
 
   // Create Challenge Modal
@@ -83,6 +92,36 @@ export default function ChallengesPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    const urls = proofPhotos.map((photo) => URL.createObjectURL(photo));
+    setPhotoPreviews(urls);
+
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, [proofPhotos]);
+
+  function closeProofModal() {
+    setActiveProofChallenge(null);
+    setProofText("");
+    setProofPhotos([]);
+    setProofError(null);
+  }
+
+  function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? []);
+    const validPhotos = selected.filter(
+      (photo) => ["image/jpeg", "image/png"].includes(photo.type) && photo.size <= 5 * 1024 * 1024,
+    );
+
+    if (validPhotos.length !== selected.length) {
+      setProofError("Only JPG or PNG photos up to 5 MB can be attached.");
+    } else {
+      setProofError(null);
+    }
+
+    setProofPhotos((current) => [...current, ...validPhotos].slice(0, 5));
+    event.target.value = "";
+  }
 
   async function loadData() {
     setIsLoading(true);
@@ -144,19 +183,21 @@ export default function ChallengesPage() {
 
     try {
       const token = getToken();
+      const formData = new FormData();
+      formData.append("proofText", proofText);
+      proofPhotos.forEach((photo) => formData.append("photos", photo));
+
       const res = await fetch(`http://localhost:4000/gamification/challenges/${activeProofChallenge.id}/submit`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ proofText }),
+        body: formData,
       });
       const body = await res.json();
 
       if (res.ok) {
-        setActiveProofChallenge(null);
-        setProofText("");
+        closeProofModal();
         loadData();
       } else {
         setProofError(body.error?.message ?? "Failed to submit proof.");
@@ -234,11 +275,20 @@ export default function ChallengesPage() {
   }
 
   async function handleReject(id: string) {
+    const reviewFeedback = window.prompt("Explain what the employee should improve before resubmitting:");
+    if (reviewFeedback === null) return;
+
+    if (reviewFeedback.trim().length < 3) {
+      alert("Please enter at least 3 characters of feedback.");
+      return;
+    }
+
     try {
       const token = getToken();
       const res = await fetch(`http://localhost:4000/gamification/submissions/${id}/reject`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewFeedback: reviewFeedback.trim() }),
       });
       const body = await res.json();
 
@@ -421,16 +471,26 @@ export default function ChallengesPage() {
                         {status === "REJECTED" && "Rejected (Click to Resubmit)"}
                       </span>
                       {status === "REJECTED" && (
-                        <button
-                          onClick={() => {
-                            setActiveProofChallenge(challenge);
-                            setProofText(userSub.proofText);
-                          }}
-                          className="mt-2 block w-full text-xs text-emerald-600 font-semibold underline hover:text-emerald-700"
-                          type="button"
-                        >
-                          Resubmit Proof
-                        </button>
+                        <div className="mt-2 text-left">
+                          {userSub.reviewFeedback ? (
+                            <div className="rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
+                              <span className="font-semibold">Reviewer feedback: </span>
+                              {userSub.reviewFeedback}
+                            </div>
+                          ) : null}
+                          <button
+                            onClick={() => {
+                              setActiveProofChallenge(challenge);
+                              setProofText(userSub.proofText);
+                              setProofPhotos([]);
+                              setProofError(null);
+                            }}
+                            className="mt-2 block w-full text-xs text-emerald-600 font-semibold underline hover:text-emerald-700"
+                            type="button"
+                          >
+                            Resubmit Proof
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -478,6 +538,25 @@ export default function ChallengesPage() {
                       <p className="text-xs font-semibold text-slate-600 mb-1">Employee Submission Proof:</p>
                       <p className="text-xs text-slate-700 italic font-mono whitespace-pre-line">{sub.proofText}</p>
                     </div>
+                    {sub.evidence?.length ? (
+                      <div className="flex flex-wrap gap-2" aria-label="Submitted photo proof">
+                        {sub.evidence.map((photo) => (
+                          <a
+                            className="block overflow-hidden rounded-md border border-slate-200 bg-white"
+                            href={`http://localhost:4000${photo.url}`}
+                            key={photo.id}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <img
+                              alt={photo.originalName}
+                              className="h-16 w-16 object-cover"
+                              src={`http://localhost:4000${photo.url}`}
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
                     <p className="text-[10px] text-slate-400">
                       Submitted on {new Date(sub.submittedAt).toLocaleString()}
                     </p>
@@ -694,7 +773,7 @@ export default function ChallengesPage() {
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-lg font-bold text-slate-900">Submit Challenge Proof</h3>
               <button
-                onClick={() => setActiveProofChallenge(null)}
+                onClick={closeProofModal}
                 className="text-slate-400 hover:text-slate-600"
                 type="button"
               >
@@ -725,10 +804,46 @@ export default function ChallengesPage() {
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">Photo proof (optional)</label>
+                <p className="mt-1 text-xs text-slate-500">Attach up to five JPG or PNG photos, each up to 5 MB.</p>
+                <label className="mt-2 flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">
+                  <input
+                    accept="image/jpeg,image/png"
+                    className="sr-only"
+                    multiple
+                    onChange={handlePhotoChange}
+                    type="file"
+                  />
+                  Add photos
+                </label>
+                {proofPhotos.length ? (
+                  <div className="mt-3 grid grid-cols-5 gap-2">
+                    {proofPhotos.map((photo, index) => (
+                      <div className="relative" key={`${photo.name}-${photo.lastModified}-${index}`}>
+                        <img
+                          alt={`Selected proof photo ${index + 1}`}
+                          className="h-14 w-full rounded-md border border-slate-200 object-cover"
+                          src={photoPreviews[index]}
+                        />
+                        <button
+                          aria-label={`Remove ${photo.name}`}
+                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-xs text-white"
+                          onClick={() => setProofPhotos((current) => current.filter((_, photoIndex) => photoIndex !== index))}
+                          type="button"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => setActiveProofChallenge(null)}
+                  onClick={closeProofModal}
                   className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
                 >
                   Cancel
