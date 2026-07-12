@@ -36,6 +36,17 @@ model User {
   carbonTransactions CarbonTransaction[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
+
+  xp                     Int                   @default(0)
+  participations         CsrParticipation[]
+  createdActivities      CsrActivity[]         @relation("ActivityCreator")
+  submissions            ChallengeSubmission[]
+  badges                 UserBadge[]
+  approvedSubmissions    ChallengeSubmission[] @relation("SubmissionAuditor")
+  approvedParticipations CsrParticipation[]   @relation("ParticipationAuditor")
+  acknowledgements       PolicyAcknowledgement[]
+  ownedIssues            ComplianceIssue[]     @relation("IssueOwner")
+  reportRuns             ReportRun[]
 }
 
 model EmissionFactor {
@@ -83,22 +94,6 @@ model EnvironmentalGoal {
   updatedAt     DateTime @updatedAt
 
   department Department @relation(fields: [departmentId], references: [id])
-  id                     String                @id @default(cuid())
-  name                   String
-  email                  String                @unique
-  passwordHash           String
-  role                   Role
-  departmentId           String?
-  department             Department?           @relation(fields: [departmentId], references: [id])
-  xp                     Int                   @default(0)
-  participations         CsrParticipation[]
-  createdActivities      CsrActivity[]         @relation("ActivityCreator")
-  submissions            ChallengeSubmission[]
-  badges                 UserBadge[]
-  approvedSubmissions    ChallengeSubmission[] @relation("SubmissionAuditor")
-  approvedParticipations CsrParticipation[]   @relation("ParticipationAuditor")
-  createdAt              DateTime              @default(now())
-  updatedAt              DateTime              @updatedAt
 }
 
 model CsrActivity {
