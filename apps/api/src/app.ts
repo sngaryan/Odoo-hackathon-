@@ -6,11 +6,15 @@ import { governanceRouter } from "./modules/governance/routes.js";
 import { socialRouter } from "./modules/social/routes.js";
 import { gamificationRouter } from "./modules/gamification/routes.js";
 import { environmentalRouter } from "./modules/environmental/routes.js";
+import { ensureUploadDir, UPLOAD_DIR } from "./lib/storage.js";
+
+ensureUploadDir();
 
 export const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use("/uploads", express.static(UPLOAD_DIR));
 
 app.get("/health", (_req, res) => {
   res.json({

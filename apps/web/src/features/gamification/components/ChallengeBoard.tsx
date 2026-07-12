@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ProofUpload } from "./ProofUpload";
 import type { Challenge } from "../types";
 
 const initialChallenges: Challenge[] = [
@@ -112,6 +113,7 @@ export function ChallengeBoard() {
             >
               {challenge.joined ? "Joined - submit proof next" : "Join challenge"}
             </button>
+            {challenge.joined ? <ProofUpload challengeTitle={challenge.title} /> : null}
           </div>
         </article>
         ))}

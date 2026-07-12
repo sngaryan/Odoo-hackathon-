@@ -1,6 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { authenticate } from "../../middleware/authenticate.js";
+import {
+  createSubmissionEvidence,
+  deleteSubmissionEvidence,
+  formatEvidence,
+} from "../../lib/evidence.js";
+import { uploadPhotos } from "../../lib/storage.js";
 import { prisma } from "../../prisma.js";
 
 export const gamificationRouter = Router();
@@ -18,6 +24,25 @@ const createChallengeSchema = z.object({
 const submitChallengeProofSchema = z.object({
   proofText: z.string().min(10, "Proof description must be at least 10 characters long."),
 });
+
+function handlePhotoUpload(
+  req: Express.Request,
+  res: Express.Response,
+  next: Express.NextFunction,
+) {
+  uploadPhotos(req, res, (error) => {
+    if (error) {
+      res.status(400).json({
+        error: {
+          code: "UPLOAD_ERROR",
+          message: error.message ?? "Failed to upload photos.",
+        },
+      });
+      return;
+    }
+    next();
+  });
+}
 
 // Helper: Award XP-based badges
 async function checkAndAwardXpBadges(userId: string, currentXp: number) {
@@ -94,8 +119,12 @@ gamificationRouter.post("/challenges", authenticate, async (req, res) => {
   }
 });
 
-// 3. Submit proof for a challenge
-gamificationRouter.post("/challenges/:id/submit", authenticate, async (req, res) => {
+// 3. Submit proof for a challenge (multipart: proofText + optional photos)
+gamificationRouter.post(
+  "/challenges/:id/submit",
+  authenticate,
+  handlePhotoUpload,
+  async (req, res) => {
   const id = req.params.id as string;
 
   const parsedBody = submitChallengeProofSchema.safeParse(req.body);
@@ -108,6 +137,8 @@ gamificationRouter.post("/challenges/:id/submit", authenticate, async (req, res)
     });
     return;
   }
+
+  const uploadedFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
 
   try {
     const challenge = await prisma.challenge.findUnique({
@@ -126,10 +157,42 @@ gamificationRouter.post("/challenges/:id/submit", authenticate, async (req, res)
           challengeId: id,
         },
       },
+      include: { evidence: true },
     });
 
     if (existingSubmission) {
-      res.status(400).json({ error: { message: "You have already submitted proof for this challenge." } });
+      if (existingSubmission.status !== "REJECTED") {
+        res.status(400).json({ error: { message: "You have already submitted proof for this challenge." } });
+        return;
+      }
+
+      if (existingSubmission.evidence.length > 0) {
+        await deleteSubmissionEvidence(existingSubmission.id);
+      }
+
+      const updated = await prisma.challengeSubmission.update({
+        where: { id: existingSubmission.id },
+        data: {
+          status: "SUBMITTED",
+          proofText: parsedBody.data.proofText,
+          submittedAt: new Date(),
+          approvedAt: null,
+          approvedById: null,
+        },
+      });
+
+      const evidence = await createSubmissionEvidence(
+        existingSubmission.id,
+        req.user.sub,
+        uploadedFiles,
+      );
+
+      res.json({
+        data: {
+          ...updated,
+          evidence,
+        },
+      });
       return;
     }
 
@@ -142,7 +205,18 @@ gamificationRouter.post("/challenges/:id/submit", authenticate, async (req, res)
       },
     });
 
-    res.status(201).json({ data: submission });
+    const evidence = await createSubmissionEvidence(
+      submission.id,
+      req.user.sub,
+      uploadedFiles,
+    );
+
+    res.status(201).json({
+      data: {
+        ...submission,
+        evidence,
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ error: { message: error.message } });
   }
@@ -158,17 +232,28 @@ gamificationRouter.get("/submissions", authenticate, async (req, res) => {
             select: { id: true, name: true, email: true, department: true },
           },
           challenge: true,
+          evidence: true,
         },
         orderBy: { submittedAt: "desc" },
       });
-      res.json({ data: submissions });
+      res.json({
+        data: submissions.map((submission) => ({
+          ...submission,
+          evidence: submission.evidence.map(formatEvidence),
+        })),
+      });
     } else {
       const submissions = await prisma.challengeSubmission.findMany({
         where: { userId: req.user.sub },
-        include: { challenge: true },
+        include: { challenge: true, evidence: true },
         orderBy: { submittedAt: "desc" },
       });
-      res.json({ data: submissions });
+      res.json({
+        data: submissions.map((submission) => ({
+          ...submission,
+          evidence: submission.evidence.map(formatEvidence),
+        })),
+      });
     }
   } catch (error: any) {
     res.status(500).json({ error: { message: error.message } });

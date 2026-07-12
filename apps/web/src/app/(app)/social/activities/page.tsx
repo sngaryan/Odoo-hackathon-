@@ -41,6 +41,16 @@ export default function SocialActivitiesPage() {
   const [activeProofActivity, setActiveProofActivity] = useState<CsrActivity | null>(null);
   const [proofText, setProofText] = useState("");
   const [proofError, setProofError] = useState<string | null>(null);
+  const [proofTab, setProofTab] = useState<"details" | "photos">("details");
+  const [proofPhotos, setProofPhotos] = useState<File[]>([]);
+  const [proofPhotoPreviews, setProofPhotoPreviews] = useState<string[]>([]);
+
+  useEffect(() => {
+    const previewUrls = proofPhotos.map((photo) => URL.createObjectURL(photo));
+    setProofPhotoPreviews(previewUrls);
+
+    return () => previewUrls.forEach((previewUrl) => URL.revokeObjectURL(previewUrl));
+  }, [proofPhotos]);
 
   useEffect(() => {
     loadData();
@@ -150,19 +160,23 @@ export default function SocialActivitiesPage() {
 
     try {
       const token = getToken();
+      const formData = new FormData();
+      formData.append("proofText", proofText);
+      proofPhotos.forEach((photo) => formData.append("photos", photo));
+
       const res = await fetch(`http://localhost:4000/social/activities/${activeProofActivity.id}/submit-proof`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ proofText }),
+        body: formData,
       });
       const body = await res.json();
 
       if (res.ok) {
         setActiveProofActivity(null);
         setProofText("");
+        setProofPhotos([]);
         loadData();
       } else {
         setProofError(body.error?.message ?? "Failed to submit proof.");
@@ -170,6 +184,41 @@ export default function SocialActivitiesPage() {
     } catch (err: any) {
       setProofError("Server connection error.");
     }
+  }
+
+  function openProofModal(activity: CsrActivity, existingProofText: string | null | undefined) {
+    setActiveProofActivity(activity);
+    setProofText(existingProofText || "");
+    setProofTab("details");
+    setProofPhotos([]);
+    setProofError(null);
+  }
+
+  function closeProofModal() {
+    setActiveProofActivity(null);
+    setProofTab("details");
+    setProofPhotos([]);
+    setProofError(null);
+  }
+
+  function handleProofPhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedPhotos = Array.from(event.target.files ?? []);
+    const validPhotos = selectedPhotos.filter(
+      (photo) => ["image/jpeg", "image/png"].includes(photo.type) && photo.size <= 5 * 1024 * 1024,
+    );
+
+    if (validPhotos.length !== selectedPhotos.length) {
+      setProofError("Only JPG or PNG photos up to 5 MB can be added.");
+    } else {
+      setProofError(null);
+    }
+
+    setProofPhotos((currentPhotos) => [...currentPhotos, ...validPhotos].slice(0, 5));
+    event.target.value = "";
+  }
+
+  function removeProofPhoto(indexToRemove: number) {
+    setProofPhotos((currentPhotos) => currentPhotos.filter((_, index) => index !== indexToRemove));
   }
 
   const isManager = user?.role === "ADMIN" || user?.role === "ESG_MANAGER";
@@ -280,10 +329,7 @@ export default function SocialActivitiesPage() {
                   <div className="space-y-2">
                     {(status === "REGISTERED" || status === "REJECTED") && (
                       <button
-                        onClick={() => {
-                          setActiveProofActivity(activity);
-                          setProofText(userParticipation.proofText || "");
-                        }}
+                        onClick={() => openProofModal(activity, userParticipation.proofText)}
                         className="w-full rounded-lg border border-emerald-600 py-2 text-center text-sm font-semibold text-emerald-600 hover:bg-emerald-50 transition"
                         type="button"
                       >
@@ -424,7 +470,7 @@ export default function SocialActivitiesPage() {
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-lg font-bold text-slate-900">Submit Volunteering Proof</h3>
               <button
-                onClick={() => setActiveProofActivity(null)}
+                onClick={closeProofModal}
                 className="text-slate-400 hover:text-slate-600"
                 type="button"
               >
@@ -443,7 +489,33 @@ export default function SocialActivitiesPage() {
             )}
 
             <form onSubmit={handleSubmitProof} className="space-y-4">
-              <div>
+              <div className="flex gap-4 border-b border-slate-200">
+                <button
+                  className={`border-b-2 px-1 pb-2 text-sm font-semibold transition ${
+                    proofTab === "details"
+                      ? "border-emerald-600 text-emerald-700"
+                      : "border-transparent text-slate-500 hover:text-slate-700"
+                  }`}
+                  onClick={() => setProofTab("details")}
+                  type="button"
+                >
+                  Proof details
+                </button>
+                <button
+                  className={`border-b-2 px-1 pb-2 text-sm font-semibold transition ${
+                    proofTab === "photos"
+                      ? "border-emerald-600 text-emerald-700"
+                      : "border-transparent text-slate-500 hover:text-slate-700"
+                  }`}
+                  onClick={() => setProofTab("photos")}
+                  type="button"
+                >
+                  Photos & proof {proofPhotos.length ? `(${proofPhotos.length})` : ""}
+                </button>
+              </div>
+
+              {proofTab === "details" ? (
+                <div>
                 <label className="block text-xs font-semibold text-slate-700">
                   Volunteering Proof Details
                 </label>
@@ -453,12 +525,66 @@ export default function SocialActivitiesPage() {
                   className="mt-1 w-full rounded-lg border border-slate-300 p-2 h-28 text-sm"
                   placeholder="Describe your volunteering contribution. (e.g. what tasks you completed, how long you stayed, photos or drives links...)"
                 />
-              </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">Add photos of your contribution</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Upload up to five JPG or PNG photos, with a maximum size of 5 MB each.
+                    </p>
+                  </div>
+
+                  <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-emerald-300 bg-emerald-50 px-4 py-6 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100">
+                    <input
+                      accept="image/jpeg,image/png"
+                      className="sr-only"
+                      multiple
+                      onChange={handleProofPhotoChange}
+                      type="file"
+                    />
+                    Choose photos
+                  </label>
+
+                  {proofPhotos.length ? (
+                    <div className="grid grid-cols-3 gap-3">
+                      {proofPhotos.map((photo, index) => (
+                        <div className="relative" key={`${photo.name}-${photo.lastModified}-${index}`}>
+                          <img
+                            alt={`Proof photo ${index + 1}`}
+                            className="h-24 w-full rounded-lg border border-slate-200 object-cover"
+                            src={proofPhotoPreviews[index]}
+                          />
+                          <button
+                            aria-label={`Remove ${photo.name}`}
+                            className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white hover:bg-slate-700"
+                            onClick={() => removeProofPhoto(index)}
+                            type="button"
+                          >
+                            x
+                          </button>
+                          <p className="mt-1 truncate text-xs text-slate-500">{photo.name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                      No photos selected yet.
+                    </p>
+                  )}
+
+                  {proofPhotos.length > 0 && (
+                    <p className="text-xs text-emerald-700">
+                      {proofPhotos.length} photo{proofPhotos.length === 1 ? "" : "s"} will be uploaded with your proof.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => setActiveProofActivity(null)}
+                  onClick={closeProofModal}
                   className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
                 >
                   Cancel
