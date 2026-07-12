@@ -74,7 +74,12 @@ export default function EnvironmentalFactorsPage() {
 
       const body = await res.json();
       if (!res.ok) {
-        setFormError(body.error?.message || "Failed to create emission factor.");
+        if (Array.isArray(body.error?.message)) {
+          const msgs = body.error.message.map((e: any) => `${e.path.join('.')}: ${e.message}`);
+          setFormError(`Validation error: ${msgs.join(', ')}`);
+        } else {
+          setFormError(body.error?.message || "Failed to create emission factor.");
+        }
         return;
       }
       

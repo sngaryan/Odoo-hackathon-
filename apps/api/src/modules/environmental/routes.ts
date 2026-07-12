@@ -9,6 +9,7 @@ import {
   createGoal,
   updateGoal,
   getDepartments,
+  getSummary,
 } from "./controllers.js";
 
 export const environmentalRouter = Router();
@@ -30,3 +31,6 @@ environmentalRouter.post("/transactions", authorize("ADMIN", "ESG_MANAGER"), cre
 environmentalRouter.get("/goals", getGoals);
 environmentalRouter.post("/goals", authorize("ADMIN", "ESG_MANAGER"), createGoal);
 environmentalRouter.patch("/goals/:id", authorize("ADMIN", "ESG_MANAGER"), updateGoal);
+
+// Summary / Analytics
+environmentalRouter.get("/summary", getSummary);

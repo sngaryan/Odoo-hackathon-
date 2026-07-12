@@ -266,3 +266,83 @@ export async function updateGoal(req: Request, res: Response) {
     }
   }
 }
+
+export async function getSummary(req: Request, res: Response) {
+  try {
+    const user = req.user as AuthenticatedUser;
+    let departmentId = req.query.departmentId as string | undefined;
+
+    if (user.role === "EMPLOYEE" || user.role === "AUDITOR") {
+      departmentId = user.departmentId || undefined;
+    }
+
+    const where = departmentId ? { departmentId } : {};
+
+    const transactions = await prisma.carbonTransaction.findMany({
+      where,
+      include: {
+        emissionFactor: true,
+        department: true,
+      },
+    });
+
+    const activeGoalsCount = await prisma.environmentalGoal.count({
+      where: {
+        ...where,
+        status: { not: "COMPLETED" },
+      }
+    });
+
+    let totalEmissions = 0;
+    const departmentBreakdown: Record<string, number> = {};
+    const monthlyData: Record<string, Record<string, number>> = {};
+    const categories = new Set<string>();
+
+    for (const tx of transactions) {
+      const co2e = Number(tx.calculatedKgCo2e);
+      totalEmissions += co2e;
+
+      const deptName = tx.department.name;
+      departmentBreakdown[deptName] = (departmentBreakdown[deptName] || 0) + co2e;
+
+      const date = new Date(tx.occurredOn);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      const category = tx.emissionFactor.category;
+      
+      categories.add(category);
+
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {};
+      }
+      
+      if (!monthlyData[monthKey][category]) {
+        monthlyData[monthKey][category] = 0;
+      }
+      
+      monthlyData[monthKey][category] += co2e;
+    }
+
+    // Format for Recharts
+    const chartData = Object.keys(monthlyData).sort().map(month => {
+      const entry: any = { name: month };
+      const monthData = monthlyData[month];
+      for (const cat of categories) {
+        entry[cat] = Number(((monthData && monthData[cat]) || 0).toFixed(2));
+      }
+      return entry;
+    });
+
+    res.json({ 
+      data: {
+        monthlyTrend: chartData,
+        totalEmissions,
+        totalRecords: transactions.length,
+        activeGoals: activeGoalsCount,
+        departmentBreakdown: Object.entries(departmentBreakdown).map(([name, value]) => ({ name, value }))
+      } 
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to fetch summary data" } });
+  }
+}
