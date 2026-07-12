@@ -191,12 +191,12 @@ export default function PoliciesPage() {
                       type="button"
                       disabled={isAccepted || acknowledgingId === policy.id}
                       onClick={() => acknowledge(policy.id)}
-                      className={`sm:self-center shrink-0 inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 cursor-pointer ${
+                      className={`sm:self-center shrink-0 inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-all duration-200 cursor-pointer ${
                         isAccepted
                           ? "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
                           : acknowledgingId === policy.id
-                          ? "bg-emerald-500/50 cursor-wait"
-                          : "bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 hover:-translate-y-0.5"
+                          ? "bg-emerald-500/50 text-white cursor-wait"
+                          : "bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 hover:-translate-y-0.5 text-white"
                       }`}
                     >
                       {isAccepted ? (
