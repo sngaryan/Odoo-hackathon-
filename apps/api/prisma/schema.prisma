@@ -24,18 +24,110 @@ model Department {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  name         String
-  email        String     @unique
-  passwordHash String
-  role         Role
-  departmentId String?
-  department   Department? @relation(fields: [departmentId], references: [id])
-  acknowledgements PolicyAcknowledgement[]
-  ownedIssues ComplianceIssue[] @relation("IssueOwner")
-  reportRuns ReportRun[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                     String                @id @default(cuid())
+  name                   String
+  email                  String                @unique
+  passwordHash           String
+  role                   Role
+  departmentId           String?
+  department             Department?           @relation(fields: [departmentId], references: [id])
+  xp                     Int                   @default(0)
+  participations         CsrParticipation[]
+  createdActivities      CsrActivity[]         @relation("ActivityCreator")
+  submissions            ChallengeSubmission[]
+  badges                 UserBadge[]
+  approvedSubmissions    ChallengeSubmission[] @relation("SubmissionAuditor")
+  approvedParticipations CsrParticipation[]   @relation("ParticipationAuditor")
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+}
+
+model CsrActivity {
+  id                String             @id @default(cuid())
+  title             String
+  description       String
+  date              DateTime
+  location          String
+  volunteeringHours Float
+  xpReward          Int                @default(100)
+  creatorId         String
+  creator           User               @relation("ActivityCreator", fields: [creatorId], references: [id])
+  participations    CsrParticipation[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model CsrParticipation {
+  id           String      @id @default(cuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id])
+  activityId   String
+  activity     CsrActivity @relation(fields: [activityId], references: [id])
+  status       String      // "REGISTERED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED"
+  proofText    String?
+  submittedAt  DateTime?
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?       @relation("ParticipationAuditor", fields: [approvedById], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([userId, activityId])
+}
+
+model Challenge {
+  id            String                @id @default(cuid())
+  title         String
+  description   String
+  type          String                // "COMMUTE" | "ENERGY" | "WASTE" | "WATER" | "OTHER"
+  xpReward      Int                   @default(50)
+  badgeRewardId String?
+  badgeReward   Badge?                @relation(fields: [badgeRewardId], references: [id])
+  startDate     DateTime
+  endDate       DateTime
+  submissions   ChallengeSubmission[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+}
+
+model ChallengeSubmission {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  challengeId  String
+  challenge    Challenge @relation(fields: [challengeId], references: [id])
+  status       String    // "SUBMITTED" | "APPROVED" | "REJECTED"
+  proofText    String
+  submittedAt  DateTime  @default(now())
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?     @relation("SubmissionAuditor", fields: [approvedById], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, challengeId])
+}
+
+model Badge {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String
+  iconUrl     String      // e.g. "commute", "energy", "volunteering", "first-step"
+  xpThreshold Int         @default(0) // earned automatically when reaching this XP, or manually rewarded
+  challenges  Challenge[]
+  userBadges  UserBadge[]
+  createdAt   DateTime    @default(now())
+}
+
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  badgeId  String
+  badge    Badge    @relation(fields: [badgeId], references: [id])
+  earnedAt DateTime @default(now())
+
+  @@unique([userId, badgeId])
 }
 
 enum PolicyStatus {
