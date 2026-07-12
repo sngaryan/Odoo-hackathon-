@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getToken, getCurrentUser, type CurrentUser } from "@/lib/auth";
+import { EnvironmentalNav } from "@/components/EnvironmentalNav";
 
 type Factor = { id: string; name: string; unit: string; factorKgCo2e: string; active: boolean };
 type Transaction = {
@@ -123,6 +124,7 @@ export default function EnvironmentalTransactionsPage() {
           </button>
         )}
       </div>
+      <EnvironmentalNav />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
