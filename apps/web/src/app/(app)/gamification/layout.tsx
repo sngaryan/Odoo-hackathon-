@@ -10,6 +10,7 @@ export default function GamificationLayout({ children }: { children: React.React
     { href: "/gamification/challenges", label: "Challenges" },
     { href: "/gamification/leaderboard", label: "Leaderboard" },
     { href: "/gamification/badges", label: "Badges Gallery" },
+    { href: "/gamification/rewards", label: "Rewards Store" },
   ];
 
   return (

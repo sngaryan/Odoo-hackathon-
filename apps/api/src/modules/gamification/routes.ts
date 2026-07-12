@@ -31,6 +31,10 @@ const rejectChallengeSubmissionSchema = z.object({
   reviewFeedback: z.string().trim().min(3, "Feedback must be at least 3 characters long.").max(1000),
 });
 
+const redeemRewardSchema = z.object({
+  rewardItemId: z.string().min(1),
+});
+
 function handlePhotoUpload(
   req: Request,
   res: Response,
@@ -473,6 +477,84 @@ gamificationRouter.get("/leaderboard", authenticate, async (_req, res) => {
         departments: departmentStandings,
       },
     });
+  } catch (error: any) {
+    res.status(500).json({ error: { message: error.message } });
+  }
+});
+
+// 9. Rewards catalog and a user's redemption history
+gamificationRouter.get("/rewards", authenticate, async (req, res) => {
+  try {
+    const [items, user] = await Promise.all([
+      prisma.rewardItem.findMany({ where: { active: true }, orderBy: { xpCost: "asc" } }),
+      prisma.user.findUniqueOrThrow({ where: { id: req.user.sub }, select: { xp: true } }),
+    ]);
+    res.json({ data: { xpBalance: user.xp, items } });
+  } catch (error: any) {
+    res.status(500).json({ error: { message: error.message } });
+  }
+});
+
+gamificationRouter.get("/redemptions", authenticate, async (req, res) => {
+  try {
+    const redemptions = await prisma.rewardRedemption.findMany({
+      where: { userId: req.user.sub },
+      include: { rewardItem: true },
+      orderBy: { createdAt: "desc" },
+    });
+    res.json({ data: redemptions });
+  } catch (error: any) {
+    res.status(500).json({ error: { message: error.message } });
+  }
+});
+
+// XP deduction and the redemption record are one transaction. A conditional
+// update prevents concurrent requests from spending the same XP twice.
+gamificationRouter.post("/rewards/redeem", authenticate, async (req, res) => {
+  const parsedBody = redeemRewardSchema.safeParse(req.body);
+  if (!parsedBody.success) {
+    res.status(400).json({ error: { message: "A reward item is required." } });
+    return;
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const item = await tx.rewardItem.findFirst({
+        where: { id: parsedBody.data.rewardItemId, active: true },
+      });
+      if (!item) return { kind: "NOT_FOUND" as const };
+      if (item.stock !== null && item.stock < 1) return { kind: "OUT_OF_STOCK" as const };
+
+      const debit = await tx.user.updateMany({
+        where: { id: req.user.sub, xp: { gte: item.xpCost } },
+        data: { xp: { decrement: item.xpCost } },
+      });
+      if (debit.count === 0) return { kind: "INSUFFICIENT_XP" as const };
+
+      if (item.stock !== null) {
+        await tx.rewardItem.update({ where: { id: item.id }, data: { stock: { decrement: 1 } } });
+      }
+      const redemption = await tx.rewardRedemption.create({
+        data: { userId: req.user.sub, rewardItemId: item.id, xpSpent: item.xpCost },
+        include: { rewardItem: true },
+      });
+      const user = await tx.user.findUniqueOrThrow({ where: { id: req.user.sub }, select: { xp: true } });
+      return { kind: "REDEEMED" as const, redemption, xpBalance: user.xp };
+    });
+
+    if (result.kind === "NOT_FOUND") {
+      res.status(404).json({ error: { message: "This reward is no longer available." } });
+      return;
+    }
+    if (result.kind === "OUT_OF_STOCK") {
+      res.status(409).json({ error: { message: "This reward is out of stock." } });
+      return;
+    }
+    if (result.kind === "INSUFFICIENT_XP") {
+      res.status(409).json({ error: { message: "You do not have enough XP for this reward." } });
+      return;
+    }
+    res.status(201).json({ data: result });
   } catch (error: any) {
     res.status(500).json({ error: { message: error.message } });
   }
