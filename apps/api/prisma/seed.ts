@@ -178,7 +178,7 @@ async function main() {
     },
     {
       title: "Beach Clean-up Campaign",
-      description: "Volunteer to clean plastic waste and marine debris at Versova Beach.",
+      description: "Beach clean-up volunteering activity.",
       date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
       location: "Versova Beach, Mumbai",
       volunteeringHours: 4.0,

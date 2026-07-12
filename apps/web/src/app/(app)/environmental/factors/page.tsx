@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getToken, getCurrentUser, type CurrentUser } from "@/lib/auth";
+import { EnvironmentalNav } from "@/components/EnvironmentalNav";
 
 type Factor = {
   id: string;
@@ -103,6 +104,7 @@ export default function EnvironmentalFactorsPage() {
           </button>
         )}
       </div>
+      <EnvironmentalNav />
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {loading ? (

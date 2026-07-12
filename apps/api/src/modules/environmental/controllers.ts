@@ -30,7 +30,10 @@ const goalSchema = z.object({
 });
 
 const updateGoalSchema = z.object({
+  name: z.string().min(1).optional(),
+  targetKgCo2e: z.number().positive().optional(),
   currentKgCo2e: z.number().min(0).optional(),
+  deadline: z.string().datetime().optional(),
   status: z.enum(["ON_TRACK", "AT_RISK", "COMPLETED"]).optional(),
 });
 
@@ -124,13 +127,20 @@ export async function createTransaction(req: Request, res: Response) {
     });
     
     const goals = await prisma.environmentalGoal.findMany({
-      where: { departmentId: user.departmentId, status: "ON_TRACK" }
+      where: { departmentId: user.departmentId, status: { not: "COMPLETED" } }
     });
     
     for (const goal of goals) {
+      const newCurrent = Number(goal.currentKgCo2e) + calculatedKgCo2e;
+      const target = Number(goal.targetKgCo2e);
+      const newStatus = (newCurrent / target) >= 0.8 ? "AT_RISK" : "ON_TRACK";
+      
       await prisma.environmentalGoal.update({
         where: { id: goal.id },
-        data: { currentKgCo2e: { increment: calculatedKgCo2e } }
+        data: { 
+          currentKgCo2e: newCurrent,
+          status: newStatus
+        }
       });
     }
 
@@ -196,10 +206,19 @@ export async function updateGoal(req: Request, res: Response) {
     const id = req.params.id as string;
     const data = updateGoalSchema.parse(req.body);
 
+    const existing = await prisma.environmentalGoal.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "Goal not found" } });
+      return;
+    }
+
     const goal = await prisma.environmentalGoal.update({
       where: { id },
       data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.targetKgCo2e !== undefined && { targetKgCo2e: data.targetKgCo2e }),
         ...(data.currentKgCo2e !== undefined && { currentKgCo2e: data.currentKgCo2e }),
+        ...(data.deadline !== undefined && { deadline: new Date(data.deadline) }),
         ...(data.status !== undefined && { status: data.status }),
       }
     });
