@@ -94,15 +94,18 @@ export function PolicyHistoryLog({ sessionEvents = [] }: PolicyHistoryLogProps) 
           <p className="text-sm">No historical policy acceptances recorded yet.</p>
         </div>
       ) : (
-        <div className="relative pl-6 after:absolute after:inset-y-1 after:left-[11px] after:w-[2px] after:bg-slate-100">
+        <div className="relative pl-6 after:absolute after:inset-y-1 after:left-[11px] after:w-[2px] after:bg-gradient-to-b after:from-emerald-500 after:via-teal-500 after:to-indigo-500">
           <div className="space-y-6">
             {allEvents.map((event) => {
               const isSessionEvent = event.id.startsWith("session-");
               return (
-                <div key={event.id} className="relative group">
+                <div key={event.id} className="relative group transition-transform duration-200 hover:translate-x-1">
                   {/* Timeline icon indicator */}
                   <span className="absolute -left-[27px] top-1.5 flex h-[14px] w-[14px] items-center justify-center rounded-full bg-white ring-2 ring-emerald-500 z-10 transition duration-200 group-hover:scale-110">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    {isSessionEvent && (
+                      <span className="absolute -inset-0.5 animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    )}
                   </span>
 
                   <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
@@ -116,7 +119,7 @@ export function PolicyHistoryLog({ sessionEvents = [] }: PolicyHistoryLogProps) 
                           {event.userDept ? ` · ${event.userDept}` : ""})
                         </span>
                         {isSessionEvent && (
-                          <span className="animate-pulse inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
+                          <span className="inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
                             New
                           </span>
                         )}

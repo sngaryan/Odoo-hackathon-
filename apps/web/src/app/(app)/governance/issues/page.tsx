@@ -131,6 +131,19 @@ export default function IssuesPage() {
     }
   };
 
+  const getSeverityBorder = (severity: string) => {
+    switch (severity.toUpperCase()) {
+      case "HIGH":
+      case "CRITICAL":
+        return "border-l-4 border-l-rose-500";
+      case "MEDIUM":
+        return "border-l-4 border-l-amber-500";
+      case "LOW":
+      default:
+        return "border-l-4 border-l-slate-400";
+    }
+  };
+
   return (
     <section className="max-w-7xl">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-5 mb-8">
@@ -148,7 +161,7 @@ export default function IssuesPage() {
       <div className="grid gap-6 md:grid-cols-2">
         {issues.map((issue) => (
           <ErrorBoundary key={issue.id}>
-            <article className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-300 text-left">
+            <article className={`relative overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-lg hover:border-slate-300 hover:-translate-y-1 text-left ${getSeverityBorder(issue.severity)}`}>
               {/* Header Details */}
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1.5">
