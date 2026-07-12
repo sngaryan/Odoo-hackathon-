@@ -60,6 +60,128 @@ governanceRouter.patch("/compliance-issues/:id", async (req, res) => {
 governanceRouter.get("/dashboard/overview", async (req, res) => {
   const [activePolicies, acknowledgedPolicies, openIssues, criticalIssues, audits] = await Promise.all([prisma.policy.count({ where: { status: PolicyStatus.ACTIVE } }), prisma.policyAcknowledgement.count({ where: { userId: req.user.sub } }), prisma.complianceIssue.count({ where: { status: { not: IssueStatus.RESOLVED } } }), prisma.complianceIssue.findMany({ where: { status: { not: IssueStatus.RESOLVED }, severity: { in: [IssueSeverity.HIGH, IssueSeverity.CRITICAL] } }, orderBy: { severity: "desc" }, take: 5, select: { id: true, title: true, severity: true, status: true } }), prisma.audit.count({ where: { status: AuditStatus.COMPLETED } })]);
   res.json({ data: { kpis: { activePolicies, acknowledgedPolicies, openIssues, completedAudits: audits }, riskList: criticalIssues } });
+  const userId = req.user.sub;
+
+  const [
+    activePolicies,
+    acknowledgedPolicies,
+    openIssues,
+    criticalIssues,
+    audits,
+    activeGoals,
+    totalCsr,
+    approvedCsr,
+    allIssues,
+    co2Sum,
+    user
+  ] = await Promise.all([
+    prisma.policy.count({ where: { status: PolicyStatus.ACTIVE } }),
+    prisma.policyAcknowledgement.count({ where: { userId } }),
+    prisma.complianceIssue.count({ where: { status: { not: IssueStatus.RESOLVED } } }),
+    prisma.complianceIssue.findMany({ where: { status: { not: IssueStatus.RESOLVED }, severity: { in: [IssueSeverity.HIGH, IssueSeverity.CRITICAL] } }, orderBy: { severity: "desc" }, take: 5, select: { id: true, title: true, severity: true, status: true } }),
+    prisma.audit.count({ where: { status: AuditStatus.COMPLETED } }),
+    prisma.environmentalGoal.findMany({ where: { status: { not: "COMPLETED" } } }),
+    prisma.csrParticipation.count(),
+    prisma.csrParticipation.count({ where: { status: "APPROVED" } }),
+    prisma.complianceIssue.findMany({ where: { status: { not: IssueStatus.RESOLVED } } }),
+    prisma.carbonTransaction.aggregate({ _sum: { calculatedKgCo2e: true } }),
+    prisma.user.findUnique({ where: { id: userId }, include: { department: true } })
+  ]);
+
+  // 1. Environmental Score Calculation (Goal progress)
+  let envScore = 85; // default fallback if no active goals
+  if (activeGoals.length > 0) {
+    const totalAttainment = activeGoals.reduce((sum, goal) => {
+      const target = Number(goal.targetKgCo2e);
+      const current = Number(goal.currentKgCo2e);
+      const attainment = Math.min((current / target) * 100, 100);
+      return sum + attainment;
+    }, 0);
+    envScore = Math.round(totalAttainment / activeGoals.length);
+  }
+
+  // 2. Social Score Calculation (CSR participation rate)
+  let socialScore = 75; // default fallback
+  if (totalCsr > 0) {
+    socialScore = Math.round((approvedCsr / totalCsr) * 100);
+  }
+
+  // 3. Governance Score Calculation (Weighted unresolved issues)
+  let govScore = 100;
+  allIssues.forEach((issue) => {
+    if (issue.severity === IssueSeverity.CRITICAL || issue.severity === IssueSeverity.HIGH) {
+      govScore -= 15;
+    } else if (issue.severity === IssueSeverity.MEDIUM) {
+      govScore -= 8;
+    } else if (issue.severity === IssueSeverity.LOW) {
+      govScore -= 3;
+    }
+  });
+  govScore = Math.max(govScore, 0);
+
+  // 4. Overall Score Calculation
+  const overallScore = Math.round(0.4 * envScore + 0.3 * socialScore + 0.3 * govScore);
+
+  // 5. Total CO2e
+  const totalCo2e = Math.round(Number(co2Sum._sum.calculatedKgCo2e ?? 0));
+
+  // 6. Department CO2e
+  let deptCo2e = 0;
+  if (user?.departmentId) {
+    const deptSum = await prisma.carbonTransaction.aggregate({
+      where: { departmentId: user.departmentId },
+      _sum: { calculatedKgCo2e: true }
+    });
+    deptCo2e = Math.round(Number(deptSum._sum.calculatedKgCo2e ?? 0));
+  }
+
+  // 7. Department Rank (XP Rank)
+  let deptRank = 1;
+  if (user?.departmentId) {
+    const deptUsers = await prisma.user.findMany({
+      where: { departmentId: user.departmentId },
+      orderBy: { xp: "desc" }
+    });
+    const rankIndex = deptUsers.findIndex((u) => u.id === user.id);
+    if (rankIndex !== -1) {
+      deptRank = rankIndex + 1;
+    }
+  }
+
+  // 8. Active challenge details
+  const activeChallenge = await prisma.challenge.findFirst({
+    where: {
+      startDate: { lte: new Date() },
+      endDate: { gte: new Date() }
+    },
+    orderBy: { xpReward: "desc" }
+  });
+  const activeChallengeXp = activeChallenge?.xpReward ?? 0;
+  const activeChallengeTitle = activeChallenge?.title ?? "No active challenge";
+
+  res.json({
+    data: {
+      esgScore: {
+        overall: overallScore,
+        environmental: envScore,
+        social: socialScore,
+        governance: govScore
+      },
+      kpis: {
+        activePolicies,
+        acknowledgedPolicies,
+        openIssues,
+        completedAudits: audits,
+        co2e: totalCo2e,
+        deptCo2e,
+        userXp: user?.xp ?? 0,
+        deptRank,
+        activeChallengeXp,
+        activeChallengeTitle
+      },
+      riskList: criticalIssues
+    }
+  });
 });
 
 governanceRouter.post("/reports/generate", async (req, res) => {
