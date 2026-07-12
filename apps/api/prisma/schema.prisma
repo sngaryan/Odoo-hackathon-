@@ -18,12 +18,71 @@ model Department {
   id        String   @id @default(cuid())
   name      String   @unique
   code      String   @unique
-  users     User[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  users               User[]
+  carbonTransactions  CarbonTransaction[]
+  environmentalGoals  EnvironmentalGoal[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 }
 
 model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         Role
+  departmentId String?
+  department         Department?         @relation(fields: [departmentId], references: [id])
+  carbonTransactions CarbonTransaction[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model EmissionFactor {
+  id           String              @id @default(cuid())
+  name         String
+  category     String
+  unit         String
+  factorKgCo2e Decimal
+  active       Boolean             @default(true)
+  transactions CarbonTransaction[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model CarbonTransaction {
+  id                  String         @id @default(cuid())
+  departmentId        String
+  factorId            String
+  createdById         String
+  source              String
+  description         String
+  quantity            Decimal
+  factorValueSnapshot Decimal
+  calculatedKgCo2e    Decimal
+  occurredOn          DateTime
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  department     Department     @relation(fields: [departmentId], references: [id])
+  emissionFactor EmissionFactor @relation(fields: [factorId], references: [id])
+  createdBy      User           @relation(fields: [createdById], references: [id])
+
+  @@index([occurredOn, departmentId])
+}
+
+model EnvironmentalGoal {
+  id            String   @id @default(cuid())
+  departmentId  String
+  name          String
+  targetKgCo2e  Decimal
+  currentKgCo2e Decimal
+  deadline      DateTime
+  status        String   // e.g., ON_TRACK, AT_RISK, COMPLETED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  department Department @relation(fields: [departmentId], references: [id])
   id                     String                @id @default(cuid())
   name                   String
   email                  String                @unique
