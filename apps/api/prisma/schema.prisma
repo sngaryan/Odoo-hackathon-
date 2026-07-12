@@ -26,17 +26,13 @@ model Department {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  name         String
-  email        String     @unique
-  passwordHash String
-  role         Role
-  departmentId String?
-  department         Department?         @relation(fields: [departmentId], references: [id])
-  carbonTransactions CarbonTransaction[]
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-
+  id                     String                @id @default(cuid())
+  name                   String
+  email                  String                @unique
+  passwordHash           String
+  role                   Role
+  departmentId           String?
+  department             Department?           @relation(fields: [departmentId], references: [id])
   xp                     Int                   @default(0)
   participations         CsrParticipation[]
   createdActivities      CsrActivity[]         @relation("ActivityCreator")
@@ -44,56 +40,13 @@ model User {
   badges                 UserBadge[]
   approvedSubmissions    ChallengeSubmission[] @relation("SubmissionAuditor")
   approvedParticipations CsrParticipation[]   @relation("ParticipationAuditor")
-  acknowledgements       PolicyAcknowledgement[]
+  carbonTransactions     CarbonTransaction[]
+  policyAcknowledgements PolicyAcknowledgement[]
   ownedIssues            ComplianceIssue[]     @relation("IssueOwner")
-  reportRuns             ReportRun[]
-}
-
-model EmissionFactor {
-  id           String              @id @default(cuid())
-  name         String
-  category     String
-  unit         String
-  factorKgCo2e Decimal
-  active       Boolean             @default(true)
-  transactions CarbonTransaction[]
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-}
-
-model CarbonTransaction {
-  id                  String         @id @default(cuid())
-  departmentId        String
-  factorId            String
-  createdById         String
-  source              String
-  description         String
-  quantity            Decimal
-  factorValueSnapshot Decimal
-  calculatedKgCo2e    Decimal
-  occurredOn          DateTime
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-
-  department     Department     @relation(fields: [departmentId], references: [id])
-  emissionFactor EmissionFactor @relation(fields: [factorId], references: [id])
-  createdBy      User           @relation(fields: [createdById], references: [id])
-
-  @@index([occurredOn, departmentId])
-}
-
-model EnvironmentalGoal {
-  id            String   @id @default(cuid())
-  departmentId  String
-  name          String
-  targetKgCo2e  Decimal
-  currentKgCo2e Decimal
-  deadline      DateTime
-  status        String   // e.g., ON_TRACK, AT_RISK, COMPLETED
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  department Department @relation(fields: [departmentId], references: [id])
+  reports                ReportRun[]
+  proofEvidence          ProofEvidence[]
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 }
 
 model CsrActivity {
@@ -123,6 +76,7 @@ model CsrParticipation {
   approvedAt   DateTime?
   approvedById String?
   approvedBy   User?       @relation("ParticipationAuditor", fields: [approvedById], references: [id])
+  evidence     ProofEvidence[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -156,10 +110,26 @@ model ChallengeSubmission {
   approvedAt   DateTime?
   approvedById String?
   approvedBy   User?     @relation("SubmissionAuditor", fields: [approvedById], references: [id])
+  evidence     ProofEvidence[]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   @@unique([userId, challengeId])
+}
+
+model ProofEvidence {
+  id              String               @id @default(cuid())
+  storagePath     String
+  originalName    String
+  mimeType        String
+  sizeBytes       Int
+  participationId String?
+  participation   CsrParticipation?    @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  submissionId    String?
+  submission      ChallengeSubmission? @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  uploadedById    String
+  uploadedBy      User                 @relation(fields: [uploadedById], references: [id])
+  createdAt       DateTime             @default(now())
 }
 
 model Badge {
@@ -272,4 +242,51 @@ model ReportRun {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model EmissionFactor {
+  id           String              @id @default(cuid())
+  name         String
+  category     String
+  unit         String
+  factorKgCo2e Decimal
+  active       Boolean             @default(true)
+  transactions CarbonTransaction[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model CarbonTransaction {
+  id                  String         @id @default(cuid())
+  departmentId        String
+  factorId            String
+  createdById         String
+  source              String
+  description         String
+  quantity            Decimal
+  factorValueSnapshot Decimal
+  calculatedKgCo2e    Decimal
+  occurredOn          DateTime
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  department     Department     @relation(fields: [departmentId], references: [id])
+  emissionFactor EmissionFactor @relation(fields: [factorId], references: [id])
+  createdBy      User           @relation(fields: [createdById], references: [id])
+
+  @@index([occurredOn, departmentId])
+}
+
+model EnvironmentalGoal {
+  id            String   @id @default(cuid())
+  departmentId  String
+  name          String
+  targetKgCo2e  Decimal
+  currentKgCo2e Decimal
+  deadline      DateTime
+  status        String   // e.g., ON_TRACK, AT_RISK, COMPLETED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  department Department @relation(fields: [departmentId], references: [id])
 }

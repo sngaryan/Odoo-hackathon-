@@ -77,57 +77,29 @@ async function main() {
     });
   }
 
-  // -- Environmental Seed Data --
-  const existingFactors = await prisma.emissionFactor.count();
-  if (existingFactors === 0) {
-    const factors = [
-      { name: "Diesel (Stationary)", category: "Fuel", unit: "L", factorKgCo2e: 2.673 },
-      { name: "Electricity (Grid)", category: "Energy", unit: "kWh", factorKgCo2e: 0.42 },
-      { name: "Flight (Short Haul)", category: "Travel", unit: "km", factorKgCo2e: 0.15 },
-    ];
-    await prisma.emissionFactor.createMany({ data: factors });
-  }
+  // Clean up existing records in dependency order
+  await prisma.userBadge.deleteMany({});
+  await prisma.challengeSubmission.deleteMany({});
+  await prisma.csrParticipation.deleteMany({});
+  await prisma.challenge.deleteMany({});
+  await prisma.csrActivity.deleteMany({});
+  await prisma.badge.deleteMany({});
+  await prisma.carbonTransaction.deleteMany({});
+  await prisma.environmentalGoal.deleteMany({});
+  await prisma.emissionFactor.deleteMany({});
+  await prisma.complianceIssue.deleteMany({});
+  await prisma.audit.deleteMany({});
+  await prisma.policyAcknowledgement.deleteMany({});
+  await prisma.policy.deleteMany({});
 
-  const allFactors = await prisma.emissionFactor.findMany();
-  const susDept = await prisma.department.findUnique({ where: { code: "SUS" } });
-  const opsDept = await prisma.department.findUnique({ where: { code: "OPS" } });
-  const esgManager = await prisma.user.findUnique({ where: { email: "manager@ecosphere.demo" } });
+  console.log("Cleaned up existing transaction, challenge, activity, governance and environmental tables.");
 
-  const existingGoals = await prisma.environmentalGoal.count();
-  if (existingGoals === 0 && susDept && opsDept) {
-    await prisma.environmentalGoal.createMany({
-      data: [
-        { departmentId: susDept.id, name: "Reduce Office Electricity", targetKgCo2e: 5000, currentKgCo2e: 2000, deadline: new Date("2026-12-31"), status: "ON_TRACK" },
-        { departmentId: opsDept.id, name: "Lower Fleet Emissions", targetKgCo2e: 10000, currentKgCo2e: 9500, deadline: new Date("2026-09-30"), status: "AT_RISK" },
-        { departmentId: susDept.id, name: "Q1 Travel Reduction", targetKgCo2e: 2000, currentKgCo2e: 1800, deadline: new Date("2026-03-31"), status: "COMPLETED" },
-      ]
-    });
-  }
-
-  const existingTx = await prisma.carbonTransaction.count();
-  if (existingTx === 0 && allFactors.length > 0 && opsDept && susDept && esgManager) {
-    const diesel = allFactors.find((f) => f.name.includes("Diesel"));
-    const grid = allFactors.find((f) => f.name.includes("Electricity"));
-    
-    if (diesel && grid) {
-      await prisma.carbonTransaction.createMany({
-        data: [
-          { departmentId: opsDept.id, factorId: diesel.id, createdById: esgManager.id, source: "Fleet Vehicle A", description: "Monthly fuel", quantity: 500, factorValueSnapshot: diesel.factorKgCo2e, calculatedKgCo2e: 500 * Number(diesel.factorKgCo2e), occurredOn: new Date("2026-06-01") },
-          { departmentId: opsDept.id, factorId: diesel.id, createdById: esgManager.id, source: "Fleet Vehicle B", description: "Monthly fuel", quantity: 450, factorValueSnapshot: diesel.factorKgCo2e, calculatedKgCo2e: 450 * Number(diesel.factorKgCo2e), occurredOn: new Date("2026-06-05") },
-          { departmentId: susDept.id, factorId: grid.id, createdById: esgManager.id, source: "HQ Building", description: "June Electricity", quantity: 12000, factorValueSnapshot: grid.factorKgCo2e, calculatedKgCo2e: 12000 * Number(grid.factorKgCo2e), occurredOn: new Date("2026-06-30") },
-          { departmentId: opsDept.id, factorId: diesel.id, createdById: esgManager.id, source: "Generator Backup", description: "Testing", quantity: 50, factorValueSnapshot: diesel.factorKgCo2e, calculatedKgCo2e: 50 * Number(diesel.factorKgCo2e), occurredOn: new Date("2026-07-02") },
-          { departmentId: susDept.id, factorId: grid.id, createdById: esgManager.id, source: "Branch Office", description: "July Electricity", quantity: 4000, factorValueSnapshot: grid.factorKgCo2e, calculatedKgCo2e: 4000 * Number(grid.factorKgCo2e), occurredOn: new Date("2026-07-05") },
-          { departmentId: opsDept.id, factorId: diesel.id, createdById: esgManager.id, source: "Fleet Vehicle C", description: "Ad-hoc fuel", quantity: 120, factorValueSnapshot: diesel.factorKgCo2e, calculatedKgCo2e: 120 * Number(diesel.factorKgCo2e), occurredOn: new Date("2026-07-10") },
-          { departmentId: susDept.id, factorId: grid.id, createdById: esgManager.id, source: "HQ Building", description: "July partial", quantity: 5000, factorValueSnapshot: grid.factorKgCo2e, calculatedKgCo2e: 5000 * Number(grid.factorKgCo2e), occurredOn: new Date("2026-07-11") },
-          { departmentId: opsDept.id, factorId: diesel.id, createdById: esgManager.id, source: "Fleet Vehicle A", description: "Monthly fuel", quantity: 520, factorValueSnapshot: diesel.factorKgCo2e, calculatedKgCo2e: 520 * Number(diesel.factorKgCo2e), occurredOn: new Date("2026-07-12") },
-        ]
-      });
-    }
-  }
-
-  console.log("Seeded EcoSphere departments, users, and environmental data.");
   const auditor = await prisma.user.findUniqueOrThrow({ where: { email: "auditor@ecosphere.demo" } });
   const manager = await prisma.user.findUniqueOrThrow({ where: { email: "manager@ecosphere.demo" } });
+  const employeeUser = await prisma.user.findUniqueOrThrow({ where: { email: "employee@ecosphere.demo" } });
+  const adminUser = await prisma.user.findUniqueOrThrow({ where: { email: "admin@ecosphere.demo" } });
+
+  // -- Governance Seed Data --
   const policy = await prisma.policy.upsert({
     where: { title_version: { title: "Environmental Data Integrity", version: "1.0" } },
     update: { summary: "Every ESG record must be traceable, timely, and supported by evidence.", status: PolicyStatus.ACTIVE, publishedAt: new Date("2026-01-15") },
@@ -139,18 +111,9 @@ async function main() {
   await prisma.complianceIssue.upsert({ where: { id: "seed-evidence-issue" }, update: {}, create: { id: "seed-evidence-issue", auditId: audit.id, title: "Missing supplier emissions evidence", description: "Two supplier submissions are missing source documentation.", severity: IssueSeverity.HIGH, status: IssueStatus.IN_PROGRESS, ownerId: manager.id, openedAt: new Date("2026-06-21") } });
 
   console.log("Seeded EcoSphere departments and demo users.");
+  console.log("Seeded Governance data.");
 
-  // Clean up existing gamification/social records
-  await prisma.userBadge.deleteMany({});
-  await prisma.challengeSubmission.deleteMany({});
-  await prisma.csrParticipation.deleteMany({});
-  await prisma.challenge.deleteMany({});
-  await prisma.csrActivity.deleteMany({});
-  await prisma.badge.deleteMany({});
-
-  console.log("Cleaned up existing gamification and social tables.");
-
-  // 3. Seed Badges
+  // -- Badges Seed Data --
   const badgeData = [
     { name: "First Step", description: "Earn 100 XP to take your first step in sustainability.", iconUrl: "first-step", xpThreshold: 100 },
     { name: "Green Commuter", description: "Complete a Green Commute challenge.", iconUrl: "commute", xpThreshold: 0 },
@@ -166,11 +129,8 @@ async function main() {
   console.log("Seeded Badges.");
 
   const greenCommuterBadge = await prisma.badge.findUniqueOrThrow({ where: { name: "Green Commuter" } });
-  const adminUser = await prisma.user.findUniqueOrThrow({ where: { email: "admin@ecosphere.demo" } });
-  const managerUser = await prisma.user.findUniqueOrThrow({ where: { email: "manager@ecosphere.demo" } });
-  const employeeUser = await prisma.user.findUniqueOrThrow({ where: { email: "employee@ecosphere.demo" } });
 
-  // 4. Seed Challenges
+  // -- Challenges Seed Data --
   const challengeData = [
     {
       title: "Car-Free Commute Week",
@@ -206,7 +166,7 @@ async function main() {
   }
   console.log("Seeded Challenges.");
 
-  // 5. Seed CSR Activities
+  // -- CSR Activities Seed Data --
   const activityData = [
     {
       title: "Tree Plantation Drive 2026",
@@ -215,16 +175,16 @@ async function main() {
       location: "Sanjay Gandhi National Park, Borivali",
       volunteeringHours: 3.5,
       xpReward: 200,
-      creatorId: managerUser.id,
+      creatorId: manager.id,
     },
     {
       title: "Beach Clean-up Campaign",
-      description: "Volunteer to clean plastic waste and marine debris at Versova Beach.",
+      description: "Beach clean-up volunteering activity.",
       date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
       location: "Versova Beach, Mumbai",
       volunteeringHours: 4.0,
       xpReward: 250,
-      creatorId: managerUser.id,
+      creatorId: manager.id,
     },
     {
       title: "E-Waste Recycling Drive",
@@ -244,7 +204,7 @@ async function main() {
   }
   console.log("Seeded CSR Activities.");
 
-  // 6. Seed Participations and Submissions (Employee Standings)
+  // -- Participations and Submissions (Employee Standings) --
   const beachCleanUp = await prisma.csrActivity.findFirstOrThrow({ where: { title: "Beach Clean-up Campaign" } });
   const treePlantation = await prisma.csrActivity.findFirstOrThrow({ where: { title: "Tree Plantation Drive 2026" } });
   const carFreeCommute = await prisma.challenge.findFirstOrThrow({ where: { title: "Car-Free Commute Week" } });
@@ -258,7 +218,7 @@ async function main() {
       proofText: "Cleaned beach with the team for 4 hours. Gathered 3 bags of plastic bottle caps.",
       submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
       approvedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-      approvedById: managerUser.id,
+      approvedById: manager.id,
     }
   });
 
@@ -301,6 +261,49 @@ async function main() {
 
   console.log("Seeded initial participations, submissions, XP, and badges.");
 
+  // -- Environmental Seed Data --
+  const factors = [
+    { name: "Diesel (Stationary)", category: "Fuel", unit: "L", factorKgCo2e: 2.673 },
+    { name: "Electricity (Grid)", category: "Energy", unit: "kWh", factorKgCo2e: 0.42 },
+    { name: "Flight (Short Haul)", category: "Travel", unit: "km", factorKgCo2e: 0.15 },
+  ];
+  await prisma.emissionFactor.createMany({ data: factors });
+
+  const allFactors = await prisma.emissionFactor.findMany();
+  const susDept = await prisma.department.findUnique({ where: { code: "SUS" } });
+  const opsDept = await prisma.department.findUnique({ where: { code: "OPS" } });
+
+  if (susDept && opsDept) {
+    await prisma.environmentalGoal.createMany({
+      data: [
+        { departmentId: susDept.id, name: "Reduce Office Electricity", targetKgCo2e: 5000, currentKgCo2e: 2000, deadline: new Date("2026-12-31"), status: "ON_TRACK" },
+        { departmentId: opsDept.id, name: "Lower Fleet Emissions", targetKgCo2e: 10000, currentKgCo2e: 9500, deadline: new Date("2026-09-30"), status: "AT_RISK" },
+        { departmentId: susDept.id, name: "Q1 Travel Reduction", targetKgCo2e: 2000, currentKgCo2e: 1800, deadline: new Date("2026-03-31"), status: "COMPLETED" },
+      ]
+    });
+  }
+
+  if (allFactors.length > 0 && opsDept && susDept) {
+    const diesel = allFactors.find((f) => f.name.includes("Diesel"));
+    const grid = allFactors.find((f) => f.name.includes("Electricity"));
+    
+    if (diesel && grid) {
+      await prisma.carbonTransaction.createMany({
+        data: [
+          { departmentId: opsDept.id, factorId: diesel.id, createdById: manager.id, source: "Fleet Vehicle A", description: "Monthly fuel", quantity: 500, factorValueSnapshot: diesel.factorKgCo2e, calculatedKgCo2e: 500 * Number(diesel.factorKgCo2e), occurredOn: new Date("2026-06-01") },
+          { departmentId: opsDept.id, factorId: diesel.id, createdById: manager.id, source: "Fleet Vehicle B", description: "Monthly fuel", quantity: 450, factorValueSnapshot: diesel.factorKgCo2e, calculatedKgCo2e: 450 * Number(diesel.factorKgCo2e), occurredOn: new Date("2026-06-05") },
+          { departmentId: susDept.id, factorId: grid.id, createdById: manager.id, source: "HQ Building", description: "June Electricity", quantity: 12000, factorValueSnapshot: grid.factorKgCo2e, calculatedKgCo2e: 12000 * Number(grid.factorKgCo2e), occurredOn: new Date("2026-06-30") },
+          { departmentId: opsDept.id, factorId: diesel.id, createdById: manager.id, source: "Generator Backup", description: "Testing", quantity: 50, factorValueSnapshot: diesel.factorKgCo2e, calculatedKgCo2e: 50 * Number(diesel.factorKgCo2e), occurredOn: new Date("2026-07-02") },
+          { departmentId: susDept.id, factorId: grid.id, createdById: manager.id, source: "Branch Office", description: "July Electricity", quantity: 4000, factorValueSnapshot: grid.factorKgCo2e, calculatedKgCo2e: 4000 * Number(grid.factorKgCo2e), occurredOn: new Date("2026-07-05") },
+          { departmentId: opsDept.id, factorId: diesel.id, createdById: manager.id, source: "Fleet Vehicle C", description: "Ad-hoc fuel", quantity: 120, factorValueSnapshot: diesel.factorKgCo2e, calculatedKgCo2e: 120 * Number(diesel.factorKgCo2e), occurredOn: new Date("2026-07-10") },
+          { departmentId: susDept.id, factorId: grid.id, createdById: manager.id, source: "HQ Building", description: "July partial", quantity: 5000, factorValueSnapshot: grid.factorKgCo2e, calculatedKgCo2e: 5000 * Number(grid.factorKgCo2e), occurredOn: new Date("2026-07-11") },
+          { departmentId: opsDept.id, factorId: diesel.id, createdById: manager.id, source: "Fleet Vehicle A", description: "Monthly fuel", quantity: 520, factorValueSnapshot: diesel.factorKgCo2e, calculatedKgCo2e: 520 * Number(diesel.factorKgCo2e), occurredOn: new Date("2026-07-12") },
+        ]
+      });
+    }
+  }
+
+  console.log("Seeded EcoSphere departments, users, and environmental data.");
   console.table(
     users.map((user) => ({
       email: user.email,

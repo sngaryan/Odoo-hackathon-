@@ -1,6 +1,13 @@
 import { Router } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { authenticate } from "../../middleware/authenticate.js";
+import {
+  createParticipationEvidence,
+  deleteParticipationEvidence,
+  formatEvidence,
+} from "../../lib/evidence.js";
+import { uploadPhotos } from "../../lib/storage.js";
 import { prisma } from "../../prisma.js";
 
 export const socialRouter = Router();
@@ -17,6 +24,25 @@ const createActivitySchema = z.object({
 const submitProofSchema = z.object({
   proofText: z.string().min(10, "Proof description must be at least 10 characters long."),
 });
+
+function handlePhotoUpload(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  uploadPhotos(req, res, (error) => {
+    if (error) {
+      res.status(400).json({
+        error: {
+          code: "UPLOAD_ERROR",
+          message: error.message ?? "Failed to upload photos.",
+        },
+      });
+      return;
+    }
+    next();
+  });
+}
 
 // Helper: Award XP-based badges
 async function checkAndAwardXpBadges(userId: string, currentXp: number) {
@@ -155,8 +181,12 @@ socialRouter.post("/activities/:id/register", authenticate, async (req, res) => 
   }
 });
 
-// 4. Submit proof of participation
-socialRouter.post("/activities/:id/submit-proof", authenticate, async (req, res) => {
+// 4. Submit proof of participation (multipart: proofText + optional photos)
+socialRouter.post(
+  "/activities/:id/submit-proof",
+  authenticate,
+  handlePhotoUpload,
+  async (req, res) => {
   const id = req.params.id as string;
 
   const parsedBody = submitProofSchema.safeParse(req.body);
@@ -170,6 +200,8 @@ socialRouter.post("/activities/:id/submit-proof", authenticate, async (req, res)
     return;
   }
 
+  const uploadedFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
+
   try {
     const participation = await prisma.csrParticipation.findUnique({
       where: {
@@ -178,6 +210,7 @@ socialRouter.post("/activities/:id/submit-proof", authenticate, async (req, res)
           activityId: id,
         },
       },
+      include: { evidence: true },
     });
 
     if (!participation) {
@@ -190,6 +223,10 @@ socialRouter.post("/activities/:id/submit-proof", authenticate, async (req, res)
       return;
     }
 
+    if (participation.status === "REJECTED" && participation.evidence.length > 0) {
+      await deleteParticipationEvidence(participation.id);
+    }
+
     const updated = await prisma.csrParticipation.update({
       where: { id: participation.id },
       data: {
@@ -199,7 +236,18 @@ socialRouter.post("/activities/:id/submit-proof", authenticate, async (req, res)
       },
     });
 
-    res.json({ data: updated });
+    const evidence = await createParticipationEvidence(
+      participation.id,
+      req.user.sub,
+      uploadedFiles,
+    );
+
+    res.json({
+      data: {
+        ...updated,
+        evidence,
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ error: { message: error.message } });
   }
@@ -215,17 +263,28 @@ socialRouter.get("/participations", authenticate, async (req, res) => {
             select: { id: true, name: true, email: true, department: true },
           },
           activity: true,
+          evidence: true,
         },
         orderBy: { submittedAt: "desc" },
       });
-      res.json({ data: participations });
+      res.json({
+        data: participations.map((participation) => ({
+          ...participation,
+          evidence: participation.evidence.map(formatEvidence),
+        })),
+      });
     } else {
       const participations = await prisma.csrParticipation.findMany({
         where: { userId: req.user.sub },
-        include: { activity: true },
+        include: { activity: true, evidence: true },
         orderBy: { createdAt: "desc" },
       });
-      res.json({ data: participations });
+      res.json({
+        data: participations.map((participation) => ({
+          ...participation,
+          evidence: participation.evidence.map(formatEvidence),
+        })),
+      });
     }
   } catch (error: any) {
     res.status(500).json({ error: { message: error.message } });

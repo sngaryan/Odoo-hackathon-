@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { getToken, getCurrentUser, type CurrentUser } from "@/lib/auth";
 
+type ProofEvidence = {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string;
+};
+
 type Participation = {
   id: string;
   status: "REGISTERED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
@@ -10,6 +18,7 @@ type Participation = {
   submittedAt?: string | null;
   approvedAt?: string | null;
   createdAt: string;
+  evidence?: ProofEvidence[];
   user: {
     id: string;
     name: string;
@@ -107,6 +116,35 @@ export default function SocialParticipationPage() {
 
   const isManager = user?.role === "ADMIN" || user?.role === "ESG_MANAGER";
 
+  function renderEvidencePhotos(evidence: ProofEvidence[] | undefined) {
+    if (!evidence?.length) {
+      return null;
+    }
+
+    return (
+      <div className="mt-2 space-y-1">
+        <p className="text-xs font-semibold text-slate-600">Submitted Photos:</p>
+        <div className="flex flex-wrap gap-2">
+          {evidence.map((item) => (
+            <a
+              key={item.id}
+              href={`http://localhost:4000${item.url}`}
+              target="_blank"
+              rel="noreferrer"
+              className="block"
+            >
+              <img
+                alt={item.originalName}
+                className="h-20 w-20 rounded-lg border border-slate-200 object-cover hover:opacity-90"
+                src={`http://localhost:4000${item.url}`}
+              />
+            </a>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center text-slate-500">
@@ -197,6 +235,7 @@ export default function SocialParticipationPage() {
                         <div className="rounded-lg bg-stone-50 border border-slate-200 p-3 mt-2">
                           <p className="text-xs font-semibold text-slate-600 mb-1">Submitted Proof Description:</p>
                           <p className="text-xs text-slate-700 italic font-mono whitespace-pre-line">{item.proofText}</p>
+                          {renderEvidencePhotos(item.evidence)}
                         </div>
                         <p className="text-[10px] text-slate-400">
                           Submitted on {item.submittedAt ? new Date(item.submittedAt).toLocaleString() : "Unknown date"}
@@ -257,6 +296,7 @@ export default function SocialParticipationPage() {
                         </td>
                         <td className="p-4 max-w-xs">
                           <p className="text-xs text-slate-600 line-clamp-2 italic">{item.proofText || "No proof submitted"}</p>
+                          {renderEvidencePhotos(item.evidence)}
                         </td>
                         <td className="p-4">
                           <span
@@ -324,6 +364,7 @@ export default function SocialParticipationPage() {
                       ) : (
                         <span className="text-xs text-slate-400 italic">No proof submitted yet</span>
                       )}
+                      {renderEvidencePhotos(item.evidence)}
                     </td>
                     <td className="p-4">
                       <span
