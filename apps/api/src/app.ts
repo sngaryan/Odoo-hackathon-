@@ -2,6 +2,8 @@ import cors from "cors";
 import express from "express";
 import { authRouter } from "./modules/auth/routes.js";
 
+import { environmentalRouter } from "./modules/environmental/routes.js";
+
 export const app = express();
 
 app.use(cors());
@@ -17,3 +19,4 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/auth", authRouter);
+app.use("/api/v1/environmental", environmentalRouter);
