@@ -247,16 +247,6 @@ model ReportRun {
 model EmissionFactor {
   id           String              @id @default(cuid())
   name         String
-  email        String     @unique
-  passwordHash String
-  role         Role
-  departmentId String?
-  department   Department? @relation(fields: [departmentId], references: [id])
-  acknowledgements PolicyAcknowledgement[]
-  ownedIssues ComplianceIssue[] @relation("IssueOwner")
-  reportRuns ReportRun[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
   category     String
   unit         String
   factorKgCo2e Decimal
@@ -299,94 +289,4 @@ model EnvironmentalGoal {
   updatedAt     DateTime @updatedAt
 
   department Department @relation(fields: [departmentId], references: [id])
-}
-
-enum PolicyStatus {
-  DRAFT
-  ACTIVE
-  RETIRED
-}
-
-enum AuditStatus {
-  PLANNED
-  IN_PROGRESS
-  COMPLETED
-}
-
-enum IssueSeverity {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
-}
-
-enum IssueStatus {
-  OPEN
-  IN_PROGRESS
-  RESOLVED
-}
-
-model Policy {
-  id String @id @default(cuid())
-  title String
-  version String
-  summary String
-  status PolicyStatus @default(DRAFT)
-  publishedAt DateTime?
-  acknowledgements PolicyAcknowledgement[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  @@unique([title, version])
-}
-
-model PolicyAcknowledgement {
-  id String @id @default(cuid())
-  userId String
-  policyId String
-  acknowledgedAt DateTime @default(now())
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  policy Policy @relation(fields: [policyId], references: [id], onDelete: Cascade)
-  @@unique([userId, policyId])
-}
-
-model Audit {
-  id String @id @default(cuid())
-  title String
-  scope String
-  auditDate DateTime
-  auditorId String
-  status AuditStatus @default(PLANNED)
-  issues ComplianceIssue[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ComplianceIssue {
-  id String @id @default(cuid())
-  auditId String?
-  title String
-  description String
-  severity IssueSeverity
-  status IssueStatus @default(OPEN)
-  ownerId String?
-  openedAt DateTime @default(now())
-  resolvedAt DateTime?
-  audit Audit? @relation(fields: [auditId], references: [id], onDelete: SetNull)
-  owner User? @relation("IssueOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  @@index([status, severity])
-}
-
-model ReportRun {
-  id String @id @default(cuid())
-  userId String
-  type String
-  filters Json
-  format String
-  filePath String?
-  generatedAt DateTime @default(now())
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }

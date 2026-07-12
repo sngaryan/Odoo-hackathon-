@@ -77,8 +77,6 @@ async function main() {
     });
   }
 
-  const auditor = await prisma.user.findUniqueOrThrow({ where: { email: "auditor@ecosphere.demo" } });
-  const manager = await prisma.user.findUniqueOrThrow({ where: { email: "manager@ecosphere.demo" } });
   // Clean up existing records in dependency order
   await prisma.userBadge.deleteMany({});
   await prisma.challengeSubmission.deleteMany({});

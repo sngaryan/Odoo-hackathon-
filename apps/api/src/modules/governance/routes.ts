@@ -58,8 +58,6 @@ governanceRouter.patch("/compliance-issues/:id", async (req, res) => {
 });
 
 governanceRouter.get("/dashboard/overview", async (req, res) => {
-  const [activePolicies, acknowledgedPolicies, openIssues, criticalIssues, audits] = await Promise.all([prisma.policy.count({ where: { status: PolicyStatus.ACTIVE } }), prisma.policyAcknowledgement.count({ where: { userId: req.user.sub } }), prisma.complianceIssue.count({ where: { status: { not: IssueStatus.RESOLVED } } }), prisma.complianceIssue.findMany({ where: { status: { not: IssueStatus.RESOLVED }, severity: { in: [IssueSeverity.HIGH, IssueSeverity.CRITICAL] } }, orderBy: { severity: "desc" }, take: 5, select: { id: true, title: true, severity: true, status: true } }), prisma.audit.count({ where: { status: AuditStatus.COMPLETED } })]);
-  res.json({ data: { kpis: { activePolicies, acknowledgedPolicies, openIssues, completedAudits: audits }, riskList: criticalIssues } });
   const userId = req.user.sub;
 
   const [

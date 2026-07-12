@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { authenticate } from "../../middleware/authenticate.js";
 import {
@@ -25,9 +26,9 @@ const submitProofSchema = z.object({
 });
 
 function handlePhotoUpload(
-  req: Express.Request,
-  res: Express.Response,
-  next: Express.NextFunction,
+  req: Request,
+  res: Response,
+  next: NextFunction,
 ) {
   uploadPhotos(req, res, (error) => {
     if (error) {

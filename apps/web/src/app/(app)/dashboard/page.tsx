@@ -2,11 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
-
-type Overview = { kpis: { activePolicies: number; acknowledgedPolicies: number; openIssues: number; completedAudits: number }; riskList: { id: string; title: string; severity: string; status: string }[] };
-
-const demoOverview: Overview = {
-  kpis: { activePolicies: 18, acknowledgedPolicies: 146, openIssues: 7, completedAudits: 24 },
 import Link from "next/link";
 
 type Overview = {
@@ -63,8 +58,6 @@ export default function DashboardPage() {
     const controller = new AbortController();
     apiRequest<{ data: Overview }>("/dashboard/overview", { signal: controller.signal })
       .then((response) => response.json())
-      .then((body) => { if (body.data) { setOverview(body.data); setIsLive(true); } })
-      .catch((error: unknown) => { if (!(error instanceof DOMException && error.name === "AbortError")) setMessage("Showing prepared demo data while the live governance feed reconnects."); })
       .then((body) => {
         if (body.data) {
           setOverview(body.data);
