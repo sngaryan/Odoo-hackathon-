@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getToken, getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { EnvironmentalNav } from "@/components/EnvironmentalNav";
+import { EmissionsChart } from "@/components/EmissionsChart";
 
 type Goal = { id: string; status: string };
 type Factor = { id: string; name: string; unit: string; factorKgCo2e: string; active: boolean };
@@ -159,11 +160,17 @@ export default function EnvironmentalTransactionsPage() {
 
       const body = await res.json();
       if (!res.ok) {
-        setFormError(body.error?.message || "Failed to save transaction.");
+        if (Array.isArray(body.error?.message)) {
+          const msgs = body.error.message.map((e: any) => `${e.path.join('.')}: ${e.message}`);
+          setFormError(`Validation error: ${msgs.join(', ')}`);
+        } else {
+          setFormError(body.error?.message || "Failed to save transaction.");
+        }
         return;
       }
       
-      setTransactions([body.data, ...transactions]);
+      // Refetch data to ensure the Active Goals stat and chart are correctly updated
+      await loadData();
       setIsDrawerOpen(false);
       setFormData({ departmentId: "", factorId: "", source: "", description: "", quantity: "", occurredOn: new Date().toISOString().split("T")[0] });
     } catch (err) {
@@ -214,6 +221,8 @@ export default function EnvironmentalTransactionsPage() {
           </div>
         </div>
       </div>
+
+      <EmissionsChart />
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col md:flex-row gap-4">
         <input 
