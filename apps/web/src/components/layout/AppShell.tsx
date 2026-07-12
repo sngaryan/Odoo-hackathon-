@@ -14,6 +14,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Menu,
+  X,
 } from "lucide-react";
 
 type NavItem = {
@@ -41,6 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     getCurrentUser().then((currentUser) => {
@@ -171,7 +174,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-stone-50 text-slate-950 transition-colors duration-200">
       {/* Collapsible Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 bg-slate-950 py-6 text-white transition-all duration-300 flex flex-col justify-between z-40 border-r border-slate-900 ${
+        className={`fixed inset-y-0 left-0 bg-slate-950 py-6 text-white transition-all duration-300 hidden md:flex flex-col justify-between z-40 border-r border-slate-900 ${
           isCollapsed ? "w-20 px-2.5" : "w-64 px-4"
         }`}
       >
@@ -279,18 +282,98 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
+      {/* Mobile Menu Backdrop */}
+      {isMobileMenuOpen && (
+        <div
+          onClick={() => setIsMobileMenuOpen(false)}
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 md:hidden animate-in fade-in"
+        />
+      )}
+
+      {/* Mobile Menu Drawer */}
+      <aside
+        className={`fixed inset-y-0 left-0 w-64 bg-slate-950 px-4 py-6 text-white flex flex-col justify-between z-50 border-r border-slate-900 transition-transform duration-300 md:hidden ${
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div>
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <div className="text-xl font-bold tracking-tight text-white">EcoSphere</div>
+              <div className="mt-0.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                ESG Operations Hub
+              </div>
+            </div>
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="rounded-lg p-1.5 hover:bg-slate-900 text-slate-400 hover:text-white transition cursor-pointer"
+              type="button"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <nav className="space-y-1">
+            {navItems
+              .filter((item) => item.roles.includes(userRole))
+              .map((item) => {
+                const isActive = pathname.startsWith(item.category);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 rounded-xl px-4 py-3 transition cursor-pointer ${
+                      isActive
+                        ? `${item.colorClass} shadow-md`
+                        : "text-slate-300 hover:text-white hover:bg-slate-900 font-semibold"
+                    }`}
+                  >
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    <span className="text-sm">{item.label}</span>
+                  </Link>
+                );
+              })}
+          </nav>
+        </div>
+
+        <div className="border-t border-slate-900 pt-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 border border-slate-800 text-sm font-bold text-white select-none">
+              {getInitials(user?.name)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-bold text-white">{user?.name}</p>
+              <p className="truncate text-[10px] text-slate-500 font-semibold uppercase tracking-wider mt-0.5">
+                {user?.role?.replaceAll("_", " ")}
+              </p>
+            </div>
+          </div>
+        </div>
+      </aside>
+
       {/* Main Content Area */}
       <main
         className={`transition-all duration-300 min-h-screen ${
-          isCollapsed ? "pl-20" : "pl-64"
+          isCollapsed ? "pl-0 md:pl-20" : "pl-0 md:pl-64"
         }`}
       >
-        <header className="flex items-center justify-between border-b border-slate-200 bg-white px-8 py-4 sticky top-0 z-30 shadow-sm">
-          <div>
-            <p className="text-sm font-semibold text-slate-950">{user?.name}</p>
-            <p className="text-xs font-medium text-slate-500">
-              {user?.role?.replaceAll("_", " ")} · {user?.department?.name ?? "No department"}
-            </p>
+        <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 md:px-8 py-4 sticky top-0 z-30 shadow-sm">
+          <div className="flex items-center">
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="mr-3 rounded-lg p-2 text-slate-500 hover:bg-slate-100 md:hidden transition cursor-pointer"
+              type="button"
+              title="Open menu"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
+            <div>
+              <p className="text-sm font-semibold text-slate-950 leading-tight">{user?.name}</p>
+              <p className="text-xs font-medium text-slate-500 mt-0.5">
+                {user?.role?.replaceAll("_", " ")} · {user?.department?.name ?? "No department"}
+              </p>
+            </div>
           </div>
           <button
             onClick={handleLogout}
@@ -301,7 +384,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </header>
 
-        <div className="p-8">{children}</div>
+        <div className="p-4 md:p-8">{children}</div>
       </main>
     </div>
   );

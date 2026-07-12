@@ -101,17 +101,17 @@ export function PolicyHistoryLog({ sessionEvents = [] }: PolicyHistoryLogProps) 
               return (
                 <div key={event.id} className="relative group transition-transform duration-200 hover:translate-x-1">
                   {/* Timeline icon indicator */}
-                  <span className="absolute -left-[27px] top-1.5 flex h-[14px] w-[14px] items-center justify-center rounded-full bg-white ring-2 ring-emerald-500 z-10 transition duration-200 group-hover:scale-110">
+                  <span className="absolute -left-[19px] top-1.5 flex h-[14px] w-[14px] items-center justify-center rounded-full bg-white ring-2 ring-emerald-500 z-10 transition duration-200 group-hover:scale-110">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     {isSessionEvent && (
                       <span className="absolute -inset-0.5 animate-ping rounded-full bg-emerald-400 opacity-75" />
                     )}
                   </span>
 
-                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-900">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="text-sm font-semibold text-slate-900 whitespace-nowrap">
                           {event.userName}
                         </span>
                         <span className="text-xs text-slate-500 font-medium">
@@ -133,7 +133,7 @@ export function PolicyHistoryLog({ sessionEvents = [] }: PolicyHistoryLogProps) 
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-slate-400 shrink-0 self-start md:self-auto">
+                    <div className="flex items-center gap-1.5 text-slate-400 shrink-0 self-start sm:self-auto">
                       <Clock className="h-3.5 w-3.5 text-slate-400" />
                       <span className="text-xs font-medium text-slate-500">
                         {formatTime(event.timestamp)}
