@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getToken, getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { EnvironmentalNav } from "@/components/EnvironmentalNav";
 
+type Goal = { id: string; status: string };
 type Factor = { id: string; name: string; unit: string; factorKgCo2e: string; active: boolean };
 type Transaction = {
   id: string;
@@ -21,11 +22,19 @@ export default function EnvironmentalTransactionsPage() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [factors, setFactors] = useState<Factor[]>([]);
+  const [departments, setDepartments] = useState<{id: string; name: string}[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [formError, setFormError] = useState("");
   
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterDepartment, setFilterDepartment] = useState("");
+  const [filterFactor, setFilterFactor] = useState("");
+
   const [formData, setFormData] = useState({
+    departmentId: "",
     factorId: "",
     source: "",
     description: "",
@@ -33,45 +42,101 @@ export default function EnvironmentalTransactionsPage() {
     occurredOn: new Date().toISOString().split("T")[0],
   });
 
-  useEffect(() => {
-    async function loadData() {
-      const u = await getCurrentUser();
-      setUser(u);
-      
-      const token = getToken();
-      if (!token) return;
+  async function loadData() {
+    setLoading(true);
+    setPageError("");
+    const u = await getCurrentUser();
+    setUser(u);
+    
+    const token = getToken();
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
-      try {
-        const [txRes, factorRes] = await Promise.all([
-          fetch("http://localhost:4000/api/v1/environmental/transactions", {
-            headers: { Authorization: `Bearer ${token}` }
-          }),
-          fetch("http://localhost:4000/api/v1/environmental/factors", {
+    try {
+      const isManagerOrAdmin = u?.role === "ADMIN" || u?.role === "ESG_MANAGER";
+
+      const promises = [
+        fetch("http://localhost:4000/api/v1/environmental/transactions", {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        fetch("http://localhost:4000/api/v1/environmental/factors", {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        fetch("http://localhost:4000/api/v1/environmental/goals", {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ];
+
+      if (isManagerOrAdmin) {
+        promises.push(
+          fetch("http://localhost:4000/api/v1/environmental/departments", {
             headers: { Authorization: `Bearer ${token}` }
           })
-        ]);
-
-        if (txRes.ok && factorRes.ok) {
-          const txBody = await txRes.json();
-          const factorBody = await factorRes.json();
-          setTransactions(txBody.data);
-          setFactors(factorBody.data.filter((f: Factor) => f.active));
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+        );
       }
+
+      const results = await Promise.all(promises);
+      const allOk = results.every(res => res.ok);
+
+      if (allOk) {
+        const txBody = await results[0].json();
+        const factorBody = await results[1].json();
+        const goalsBody = await results[2].json();
+        
+        setTransactions(txBody.data);
+        setFactors(factorBody.data.filter((f: Factor) => f.active));
+        setGoals(goalsBody.data);
+
+        if (isManagerOrAdmin && results[3]) {
+          const deptBody = await results[3].json();
+          setDepartments(deptBody.data);
+        }
+      } else {
+        setPageError("Failed to load data.");
+      }
+    } catch (err) {
+      console.error(err);
+      setPageError("An error occurred while loading data.");
+    } finally {
+      setLoading(false);
     }
+  }
+
+  useEffect(() => {
     loadData();
   }, []);
 
   const totalCO2e = transactions.reduce((sum, tx) => sum + Number(tx.calculatedKgCo2e), 0);
   
+  const uniqueDepartments = Array.from(new Set(transactions.map(t => t.department.name))).sort();
+  const uniqueFactors = Array.from(new Set(transactions.map(t => t.emissionFactor.name))).sort();
+  
+  const filteredTransactions = transactions.filter(tx => {
+    const matchSearch = tx.source.toLowerCase().includes(searchQuery.toLowerCase()) || tx.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchDept = filterDepartment ? tx.department.name === filterDepartment : true;
+    const matchFactor = filterFactor ? tx.emissionFactor.name === filterFactor : true;
+    return matchSearch && matchDept && matchFactor;
+  });
+
   const selectedFactor = factors.find(f => f.id === formData.factorId);
   const livePreview = selectedFactor && formData.quantity 
     ? (Number(selectedFactor.factorKgCo2e) * Number(formData.quantity)).toFixed(2)
     : "0.00";
+
+  const openDrawer = () => {
+    setFormError("");
+    setFormData({
+      departmentId: user?.department?.id || (departments.length > 0 ? departments[0].id : ""),
+      factorId: "",
+      source: "",
+      description: "",
+      quantity: "",
+      occurredOn: new Date().toISOString().split("T")[0],
+    });
+    setIsDrawerOpen(true);
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -100,7 +165,7 @@ export default function EnvironmentalTransactionsPage() {
       
       setTransactions([body.data, ...transactions]);
       setIsDrawerOpen(false);
-      setFormData({ factorId: "", source: "", description: "", quantity: "", occurredOn: new Date().toISOString().split("T")[0] });
+      setFormData({ departmentId: "", factorId: "", source: "", description: "", quantity: "", occurredOn: new Date().toISOString().split("T")[0] });
     } catch (err) {
       setFormError("An unexpected error occurred.");
     }
@@ -117,7 +182,7 @@ export default function EnvironmentalTransactionsPage() {
         </div>
         {canEdit && (
           <button 
-            onClick={() => setIsDrawerOpen(true)}
+            onClick={openDrawer}
             className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 shadow-sm transition-colors"
           >
             Log Carbon Data
@@ -141,18 +206,61 @@ export default function EnvironmentalTransactionsPage() {
             <span className="text-sm text-slate-500">entries</span>
           </div>
         </div>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <p className="text-sm font-medium text-slate-500">Active Goals</p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-3xl font-semibold text-slate-900">{goals.filter(g => g.status !== "COMPLETED").length}</span>
+            <span className="text-sm text-slate-500">goals</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col md:flex-row gap-4">
+        <input 
+          type="text" 
+          placeholder="Search by source or description..." 
+          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
+        <select 
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          value={filterDepartment}
+          onChange={e => setFilterDepartment(e.target.value)}
+        >
+          <option value="">All Departments</option>
+          {uniqueDepartments.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <select 
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          value={filterFactor}
+          onChange={e => setFilterFactor(e.target.value)}
+        >
+          <option value="">All Emission Factors</option>
+          {uniqueFactors.map(f => <option key={f} value={f}>{f}</option>)}
+        </select>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-sm text-slate-500">Loading...</div>
-        ) : transactions.length === 0 ? (
+        ) : pageError ? (
+          <div className="p-12 text-center">
+            <p className="text-red-500 mb-4">{pageError}</p>
+            <button 
+              onClick={() => loadData()}
+              className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 shadow-sm transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        ) : filteredTransactions.length === 0 ? (
           <div className="p-12 text-center">
             <div className="text-emerald-500 mb-3 flex justify-center">
               <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
             </div>
-            <h3 className="text-sm font-medium text-slate-900">No transactions yet</h3>
-            <p className="text-sm text-slate-500 mt-1">Get started by logging your first carbon data.</p>
+            <h3 className="text-sm font-medium text-slate-900">No transactions found</h3>
+            <p className="text-sm text-slate-500 mt-1">Try adjusting your filters or log your first carbon data.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -168,7 +276,7 @@ export default function EnvironmentalTransactionsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
-                {transactions.map((tx) => (
+                {filteredTransactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-slate-600">
                       {new Date(tx.occurredOn).toLocaleDateString()}
@@ -217,6 +325,21 @@ export default function EnvironmentalTransactionsPage() {
               )}
               <form id="tx-form" onSubmit={handleSubmit} className="space-y-4">
                 <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Department</label>
+                  <select 
+                    required 
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    value={formData.departmentId}
+                    onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
+                  >
+                    <option value="" disabled>Select a department...</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Emission Factor</label>
                   <select 
                     required 
@@ -224,7 +347,7 @@ export default function EnvironmentalTransactionsPage() {
                     value={formData.factorId}
                     onChange={(e) => setFormData({ ...formData, factorId: e.target.value })}
                   >
-                    <option value="" disabled>Select a category...</option>
+                    <option value="" disabled>Select an emission factor...</option>
                     {factors.map(f => (
                       <option key={f.id} value={f.id}>{f.name} ({f.factorKgCo2e} kg/CO₂e per {f.unit})</option>
                     ))}

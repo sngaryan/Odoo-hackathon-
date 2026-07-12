@@ -1,9 +1,7 @@
 import type { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import type { AuthenticatedUser } from "../../middleware/authenticate.js";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../prisma.js";
 
 // Schemas
 const factorSchema = z.object({
@@ -15,6 +13,7 @@ const factorSchema = z.object({
 });
 
 const transactionSchema = z.object({
+  departmentId: z.string().min(1),
   factorId: z.string(),
   source: z.string().min(1),
   description: z.string(),
@@ -24,6 +23,7 @@ const transactionSchema = z.object({
 
 const goalSchema = z.object({
   name: z.string().min(1),
+  departmentId: z.string().min(1),
   targetKgCo2e: z.number().positive(),
   deadline: z.string().datetime(),
   status: z.enum(["ON_TRACK", "AT_RISK", "COMPLETED"]).default("ON_TRACK"),
@@ -38,6 +38,17 @@ const updateGoalSchema = z.object({
 });
 
 // Controllers
+
+export async function getDepartments(req: Request, res: Response) {
+  try {
+    const departments = await prisma.department.findMany({
+      orderBy: { name: "asc" },
+    });
+    res.json({ data: departments });
+  } catch (error) {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to fetch departments" } });
+  }
+}
 
 export async function getFactors(req: Request, res: Response) {
   try {
@@ -67,7 +78,12 @@ export async function createFactor(req: Request, res: Response) {
 
 export async function getTransactions(req: Request, res: Response) {
   try {
-    const departmentId = req.query.departmentId as string | undefined;
+    const user = req.user as AuthenticatedUser;
+    let departmentId = req.query.departmentId as string | undefined;
+    
+    if (user.role === "EMPLOYEE" || user.role === "AUDITOR") {
+      departmentId = user.departmentId || undefined;
+    }
     
     const where = departmentId ? { departmentId } : {};
     
@@ -92,9 +108,13 @@ export async function createTransaction(req: Request, res: Response) {
     const user = req.user as AuthenticatedUser;
     const data = transactionSchema.parse(req.body);
     
-    if (!user.departmentId) {
-       res.status(400).json({ error: { code: "INVALID_STATE", message: "User has no department" } });
-       return;
+    const dept = await prisma.department.findUnique({
+      where: { id: data.departmentId }
+    });
+
+    if (!dept) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "Department not found" } });
+      return;
     }
 
     const factor = await prisma.emissionFactor.findUnique({
@@ -108,43 +128,47 @@ export async function createTransaction(req: Request, res: Response) {
 
     const calculatedKgCo2e = Number(factor.factorKgCo2e) * data.quantity;
 
-    const transaction = await prisma.carbonTransaction.create({
-      data: {
-        departmentId: user.departmentId,
-        factorId: factor.id,
-        createdById: user.sub,
-        source: data.source,
-        description: data.description,
-        quantity: data.quantity,
-        factorValueSnapshot: factor.factorKgCo2e,
-        calculatedKgCo2e,
-        occurredOn: new Date(data.occurredOn),
-      },
-      include: {
-        emissionFactor: true,
-        department: true,
-      }
-    });
-    
-    const goals = await prisma.environmentalGoal.findMany({
-      where: { departmentId: user.departmentId, status: { not: "COMPLETED" } }
-    });
-    
-    for (const goal of goals) {
-      const newCurrent = Number(goal.currentKgCo2e) + calculatedKgCo2e;
-      const target = Number(goal.targetKgCo2e);
-      const newStatus = (newCurrent / target) >= 0.8 ? "AT_RISK" : "ON_TRACK";
-      
-      await prisma.environmentalGoal.update({
-        where: { id: goal.id },
-        data: { 
-          currentKgCo2e: newCurrent,
-          status: newStatus
+    const transactionResult = await prisma.$transaction(async (tx) => {
+      const transaction = await tx.carbonTransaction.create({
+        data: {
+          departmentId: data.departmentId,
+          factorId: factor.id,
+          createdById: user.sub,
+          source: data.source,
+          description: data.description,
+          quantity: data.quantity,
+          factorValueSnapshot: factor.factorKgCo2e,
+          calculatedKgCo2e,
+          occurredOn: new Date(data.occurredOn),
+        },
+        include: {
+          emissionFactor: true,
+          department: true,
         }
       });
-    }
+      
+      const goals = await tx.environmentalGoal.findMany({
+        where: { departmentId: data.departmentId, status: { not: "COMPLETED" } }
+      });
+      
+      for (const goal of goals) {
+        const newCurrent = Number(goal.currentKgCo2e) + calculatedKgCo2e;
+        const target = Number(goal.targetKgCo2e);
+        const newStatus = (newCurrent / target) >= 0.8 ? "AT_RISK" : "ON_TRACK";
+        
+        await tx.environmentalGoal.update({
+          where: { id: goal.id },
+          data: { 
+            currentKgCo2e: newCurrent,
+            status: newStatus
+          }
+        });
+      }
 
-    res.json({ data: transaction });
+      return transaction;
+    });
+
+    res.json({ data: transactionResult });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(422).json({ error: { code: "VALIDATION_ERROR", message: error.issues } });
@@ -157,7 +181,13 @@ export async function createTransaction(req: Request, res: Response) {
 
 export async function getGoals(req: Request, res: Response) {
   try {
-    const departmentId = req.query.departmentId as string | undefined;
+    const user = req.user as AuthenticatedUser;
+    let departmentId = req.query.departmentId as string | undefined;
+
+    if (user.role === "EMPLOYEE" || user.role === "AUDITOR") {
+      departmentId = user.departmentId || undefined;
+    }
+
     const where = departmentId ? { departmentId } : {};
     const goals = await prisma.environmentalGoal.findMany({
       where,
@@ -175,14 +205,18 @@ export async function createGoal(req: Request, res: Response) {
     const user = req.user as AuthenticatedUser;
     const data = goalSchema.parse(req.body);
     
-    if (!user.departmentId) {
-       res.status(400).json({ error: { code: "INVALID_STATE", message: "User has no department" } });
-       return;
+    const dept = await prisma.department.findUnique({
+      where: { id: data.departmentId }
+    });
+    
+    if (!dept) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "Department not found" } });
+      return;
     }
 
     const goal = await prisma.environmentalGoal.create({
       data: {
-        departmentId: user.departmentId,
+        departmentId: data.departmentId,
         name: data.name,
         targetKgCo2e: data.targetKgCo2e,
         currentKgCo2e: 0,
