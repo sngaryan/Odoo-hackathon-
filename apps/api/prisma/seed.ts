@@ -77,6 +77,8 @@ async function main() {
     });
   }
 
+  const auditor = await prisma.user.findUniqueOrThrow({ where: { email: "auditor@ecosphere.demo" } });
+  const manager = await prisma.user.findUniqueOrThrow({ where: { email: "manager@ecosphere.demo" } });
   // Clean up existing records in dependency order
   await prisma.userBadge.deleteMany({});
   await prisma.challengeSubmission.deleteMany({});
@@ -110,6 +112,7 @@ async function main() {
   const audit = await prisma.audit.upsert({ where: { id: "seed-governance-audit" }, update: {}, create: { id: "seed-governance-audit", title: "Q2 ESG Controls Review", scope: "Environmental reporting controls and evidence retention", auditDate: new Date("2026-06-20"), auditorId: auditor.id, status: AuditStatus.COMPLETED } });
   await prisma.complianceIssue.upsert({ where: { id: "seed-evidence-issue" }, update: {}, create: { id: "seed-evidence-issue", auditId: audit.id, title: "Missing supplier emissions evidence", description: "Two supplier submissions are missing source documentation.", severity: IssueSeverity.HIGH, status: IssueStatus.IN_PROGRESS, ownerId: manager.id, openedAt: new Date("2026-06-21") } });
 
+  console.log("Seeded EcoSphere departments and demo users.");
   console.log("Seeded Governance data.");
 
   // -- Badges Seed Data --
